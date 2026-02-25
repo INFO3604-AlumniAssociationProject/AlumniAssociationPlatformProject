@@ -1,10 +1,7 @@
-from flask import Blueprint, g, jsonify, render_template, request
+from flask import g, jsonify, render_template, request
 
-from App.Controllers.userControllers import login_required, role_required
 from App.Models import BoardPost, CommunityBoard, Job
 from App.database import db
-
-community_board_bp = Blueprint("community_board", __name__, url_prefix="/boards")
 
 
 def _payload():
@@ -23,8 +20,6 @@ def _job_dict(job):
     }
 
 
-@community_board_bp.get("")
-@login_required
 def list_boards():
     boards = CommunityBoard.query.order_by(CommunityBoard.name.asc()).all()
     return jsonify(
@@ -37,8 +32,6 @@ def list_boards():
     )
 
 
-@community_board_bp.post("")
-@role_required("alumni")
 def create_board():
     data = _payload()
     name = (data.get("name") or "").strip()
@@ -55,8 +48,6 @@ def create_board():
     return jsonify({"message": "Board created", "boardID": board.boardID}), 201
 
 
-@community_board_bp.get("/<board_id>")
-@login_required
 def board_page(board_id):
     board = db.session.get(CommunityBoard, board_id)
     if not board:
@@ -72,8 +63,6 @@ def board_page(board_id):
     return render_template("community_board.html", board=board, posts=posts, jobs=jobs)
 
 
-@community_board_bp.post("/<board_id>/posts")
-@role_required("alumni", "admin")
 def createPost(board_id):
     board = db.session.get(CommunityBoard, board_id)
     if not board:
@@ -90,8 +79,6 @@ def createPost(board_id):
     return jsonify({"message": "Post created", "postID": post.postID}), 201
 
 
-@community_board_bp.get("/<board_id>/jobs")
-@login_required
 def listJobs(board_id):
     board = db.session.get(CommunityBoard, board_id)
     if not board:

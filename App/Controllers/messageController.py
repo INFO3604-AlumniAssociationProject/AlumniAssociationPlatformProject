@@ -1,10 +1,7 @@
-from flask import Blueprint, g, jsonify, render_template, request
+from flask import g, jsonify, render_template, request
 
-from App.Controllers.userControllers import login_required, role_required
 from App.Models import Message
 from App.database import db
-
-message_bp = Blueprint("messages", __name__, url_prefix="/messages")
 
 
 def _payload():
@@ -23,8 +20,6 @@ def _message_dict(message):
     }
 
 
-@message_bp.get("")
-@login_required
 def inbox_page():
     inbox = (
         Message.query.filter_by(receiverID=g.current_user.userID)
@@ -35,8 +30,6 @@ def inbox_page():
     return render_template("messages.html", inbox=inbox)
 
 
-@message_bp.post("/request")
-@role_required("alumni", "admin")
 def requestMessage():
     data = _payload()
     receiver_id = (data.get("receiverID") or "").strip()
@@ -56,8 +49,6 @@ def requestMessage():
     return jsonify({"message": "Message request sent", "messageID": message.messageID}), 201
 
 
-@message_bp.post("/<message_id>/accept")
-@role_required("alumni", "admin")
 def acceptRequest(message_id):
     message = db.session.get(Message, message_id)
     if not message:
@@ -70,8 +61,6 @@ def acceptRequest(message_id):
     return jsonify({"message": "Message request accepted", "messageID": message.messageID})
 
 
-@message_bp.post("/<message_id>/reject")
-@role_required("alumni", "admin")
 def rejectMessage(message_id):
     message = db.session.get(Message, message_id)
     if not message:
@@ -84,8 +73,6 @@ def rejectMessage(message_id):
     return jsonify({"message": "Message request rejected", "messageID": message.messageID})
 
 
-@message_bp.post("")
-@role_required("alumni", "admin")
 def sendMessage():
     data = _payload()
     receiver_id = (data.get("receiverID") or "").strip()

@@ -1,12 +1,10 @@
 from functools import wraps
 
-from flask import Blueprint, g, jsonify, redirect, render_template, request, session, url_for
+from flask import g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from App.Models import Admin, Alumni, Profile, User
 from App.database import db
-
-user_bp = Blueprint("users", __name__)
 
 
 def _payload():
@@ -76,31 +74,26 @@ def _user_dict(user):
     }
 
 
-@user_bp.get("/")
 def home():
     if get_current_user():
         return redirect(url_for("users.dashboard"))
     return render_template("welcome.html")
 
 
-@user_bp.get("/login")
 def login_page():
     return render_template("login.html")
 
 
-@user_bp.get("/register")
 def register_page():
     return render_template("register.html")
 
 
-@user_bp.get("/dashboard")
 @login_required
 def dashboard():
     user = g.current_user
     return render_template("dashboard.html", user=user)
 
 
-@user_bp.post("/users/register")
 def register_user():
     data = _payload()
     required = ["email", "password", "name", "role"]
@@ -170,7 +163,6 @@ def register_user():
     return jsonify({"message": "Registration successful", "user": _user_dict(user)}), 201
 
 
-@user_bp.post("/users/login")
 def login():
     data = _payload()
     email = (data.get("email") or "").strip().lower()
@@ -190,7 +182,6 @@ def login():
     return jsonify({"message": "Login successful", "user": _user_dict(user)})
 
 
-@user_bp.post("/users/logout")
 @login_required
 def logout():
     session.clear()
@@ -199,7 +190,6 @@ def logout():
     return redirect(url_for("users.login_page"))
 
 
-@user_bp.patch("/users/profile")
 @login_required
 def updateProfile():
     data = _payload()
@@ -221,7 +211,6 @@ def updateProfile():
     return jsonify({"message": "Profile updated", "user": _user_dict(user)})
 
 
-@user_bp.post("/users/reset-password")
 @login_required
 def resetPassword():
     data = _payload()
@@ -241,7 +230,6 @@ def resetPassword():
     return jsonify({"message": "Password reset successful"})
 
 
-@user_bp.post("/users/notifications")
 @login_required
 def sendNotification():
     data = _payload()
@@ -267,14 +255,12 @@ def sendNotification():
     )
 
 
-@user_bp.get("/users/notifications/preferences")
 @login_required
 def getNotificationPreferences():
     user = g.current_user
     return jsonify({"preferences": user.notificationPreferences or {}})
 
 
-@user_bp.patch("/users/notifications/preferences")
 @login_required
 def update_notification_preferences():
     data = _payload()
@@ -291,7 +277,6 @@ def update_notification_preferences():
     return jsonify({"message": "Notification preferences updated", "preferences": existing})
 
 
-@user_bp.get("/users/me")
 @login_required
 def me():
     return jsonify({"user": _user_dict(g.current_user)})

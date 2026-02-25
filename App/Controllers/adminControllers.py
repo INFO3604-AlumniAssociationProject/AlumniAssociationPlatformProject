@@ -1,18 +1,13 @@
-from flask import Blueprint, jsonify, render_template, request
+from flask import jsonify, render_template, request
 
-from App.Controllers.userControllers import role_required
 from App.Models import Event, Job, Message, User
 from App.database import db
-
-admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
 def _payload():
     return request.get_json(silent=True) or request.form.to_dict(flat=True)
 
 
-@admin_bp.post("/users/<user_id>/approve")
-@role_required("admin")
 def approveUser(user_id):
     user = db.session.get(User, user_id)
     if not user:
@@ -22,8 +17,6 @@ def approveUser(user_id):
     return jsonify({"message": "User approved", "userID": user.userID})
 
 
-@admin_bp.post("/moderate")
-@role_required("admin")
 def moderateContent():
     data = _payload()
     content_type = (data.get("type") or "").strip().lower()
@@ -49,8 +42,6 @@ def moderateContent():
     return jsonify({"message": f"{content_type} {action}d", "id": content_id})
 
 
-@admin_bp.get("/reports")
-@role_required("admin")
 def generateReport():
     report = {
         "users": {
@@ -77,8 +68,6 @@ def generateReport():
     return jsonify({"report": report})
 
 
-@admin_bp.post("/events/<event_id>/manage")
-@role_required("admin")
 def manageEvent(event_id):
     data = _payload()
     event = db.session.get(Event, event_id)
@@ -99,8 +88,6 @@ def manageEvent(event_id):
     return jsonify({"message": f"Event {result}", "eventID": event.eventID, "status": event.status})
 
 
-@admin_bp.post("/announcements")
-@role_required("admin")
 def sendAnnouncement():
     from flask import g
 
@@ -126,8 +113,6 @@ def sendAnnouncement():
     return jsonify({"message": "Announcement sent", "recipientCount": len(created)})
 
 
-@admin_bp.get("/panel")
-@role_required("admin")
 def admin_panel():
     report = {
         "users": {

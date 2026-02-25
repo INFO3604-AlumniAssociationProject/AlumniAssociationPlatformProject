@@ -1,20 +1,15 @@
 from datetime import datetime
 
-from flask import Blueprint, g, jsonify, request
+from flask import g, jsonify, request
 
-from App.Controllers.userControllers import role_required
 from App.Models import Event, EventRegistration
 from App.database import db
-
-event_registration_bp = Blueprint("event_registrations", __name__, url_prefix="/registrations")
 
 
 def _payload():
     return request.get_json(silent=True) or request.form.to_dict(flat=True)
 
 
-@event_registration_bp.post("")
-@role_required("alumni", "admin")
 def register():
     data = _payload()
     event_id = (data.get("eventID") or "").strip()
@@ -42,8 +37,6 @@ def register():
     return jsonify({"message": "Registration complete", "registrationID": registration.registrationID}), 201
 
 
-@event_registration_bp.post("/<registration_id>/cancel")
-@role_required("alumni", "admin")
 def cancelRegistration(registration_id):
     registration = db.session.get(EventRegistration, registration_id)
     if not registration:
@@ -54,8 +47,6 @@ def cancelRegistration(registration_id):
     return jsonify({"message": "Registration cancelled", "registrationID": registration.registrationID})
 
 
-@event_registration_bp.post("/<registration_id>/check-in")
-@role_required("admin")
 def checkIn(registration_id):
     registration = db.session.get(EventRegistration, registration_id)
     if not registration:

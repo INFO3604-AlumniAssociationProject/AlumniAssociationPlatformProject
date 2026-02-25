@@ -1,10 +1,7 @@
-from flask import Blueprint, g, jsonify, render_template, request
+from flask import g, jsonify, render_template, request
 
-from App.Controllers.userControllers import role_required
 from App.Models import Alumni, Profile
 from App.database import db
-
-profile_bp = Blueprint("profiles", __name__, url_prefix="/profiles")
 
 
 def _payload():
@@ -34,8 +31,6 @@ def _profile_dict(profile):
     }
 
 
-@profile_bp.get("/me")
-@role_required("alumni")
 def my_profile():
     profile = Profile.query.filter_by(alumniID=g.current_user.userID).first()
     if not profile:
@@ -45,8 +40,6 @@ def my_profile():
     return render_template("profile.html", profile=profile, user=g.current_user)
 
 
-@profile_bp.get("/<alumni_id>")
-@role_required("alumni", "admin")
 def public_profile(alumni_id):
     profile = Profile.query.filter_by(alumniID=alumni_id).first()
     alumni = db.session.get(Alumni, alumni_id)
@@ -55,8 +48,6 @@ def public_profile(alumni_id):
     return jsonify({"alumni": {"name": alumni.name, "email": alumni.email}, "profile": _profile_dict(profile)})
 
 
-@profile_bp.patch("/me/bio")
-@role_required("alumni")
 def updateBio():
     data = _payload()
     profile = Profile.query.filter_by(alumniID=g.current_user.userID).first()
@@ -82,8 +73,6 @@ def updateBio():
     return jsonify({"message": "Profile bio updated", "profile": _profile_dict(profile)})
 
 
-@profile_bp.patch("/me/photo")
-@role_required("alumni")
 def uploadPhoto():
     data = _payload()
     photo_url = (data.get("profilePicture") or "").strip()

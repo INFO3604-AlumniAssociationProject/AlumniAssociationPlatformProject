@@ -1,12 +1,9 @@
 from datetime import datetime
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import jsonify, render_template, request
 
-from App.Controllers.userControllers import login_required, role_required
 from App.Models import Event, EventRegistration, Message
 from App.database import db
-
-event_bp = Blueprint("events", __name__, url_prefix="/events")
 
 
 def _payload():
@@ -27,15 +24,11 @@ def _event_dict(event):
     }
 
 
-@event_bp.get("")
-@login_required
 def list_events_page():
     events = Event.query.order_by(Event.date.asc(), Event.time.asc()).all()
     return render_template("events.html", events=events)
 
 
-@event_bp.post("")
-@role_required("alumni", "admin")
 def createEvent():
     from flask import g
 
@@ -67,8 +60,6 @@ def createEvent():
     return jsonify({"message": "Event created", "event": _event_dict(event)}), 201
 
 
-@event_bp.post("/<event_id>/register-attendee")
-@role_required("admin", "alumni")
 def registerAttendee(event_id):
     data = _payload()
     attendee_id = (data.get("attendeeID") or "").strip()
@@ -94,8 +85,6 @@ def registerAttendee(event_id):
     return jsonify({"message": "Attendee registered", "registrationID": registration.registrationID}), 201
 
 
-@event_bp.post("/<event_id>/cancel")
-@role_required("admin", "alumni")
 def cancelEvent(event_id):
     event = db.session.get(Event, event_id)
     if not event:
@@ -106,8 +95,6 @@ def cancelEvent(event_id):
     return jsonify({"message": "Event cancelled", "eventID": event.eventID})
 
 
-@event_bp.post("/<event_id>/send-reminders")
-@role_required("admin", "alumni")
 def sendReminders(event_id):
     from flask import g
 

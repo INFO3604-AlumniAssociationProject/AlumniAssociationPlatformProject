@@ -1,11 +1,8 @@
-from flask import Blueprint, g, jsonify, render_template, request
+from flask import g, jsonify, render_template, request
 from sqlalchemy import or_
 
-from App.Controllers.userControllers import role_required
 from App.Models import Alumni, Event, EventRegistration, Job, JobApplication, Message
 from App.database import db
-
-alumni_bp = Blueprint("alumni", __name__, url_prefix="/alumni")
 
 
 def _payload():
@@ -25,14 +22,10 @@ def _alumni_card(alumni):
     }
 
 
-@alumni_bp.get("")
-@role_required("alumni")
 def alumni_home():
     return render_template("dashboard.html", user=g.current_user)
 
 
-@alumni_bp.get("/search")
-@role_required("alumni")
 def searchAlumni():
     query = (request.args.get("q") or "").strip().lower()
     faculty = (request.args.get("faculty") or "").strip().lower()
@@ -50,9 +43,6 @@ def searchAlumni():
     results = [_alumni_card(a) for a in records.order_by(Alumni.name.asc()).all()]
     return jsonify({"results": results})
 
-
-@alumni_bp.post("/connect")
-@role_required("alumni")
 def connectToAlumni():
     data = _payload()
     requester = g.current_user
@@ -87,8 +77,6 @@ def connectToAlumni():
     return jsonify({"message": "Connection request sent", "messageID": invitation.messageID}), 201
 
 
-@alumni_bp.post("/events/<event_id>/register")
-@role_required("alumni")
 def registerForEvent(event_id):
     alumni_user = g.current_user
     event = db.session.get(Event, event_id)
@@ -109,8 +97,6 @@ def registerForEvent(event_id):
     return jsonify({"message": "Registered successfully", "registrationID": registration.registrationID}), 201
 
 
-@alumni_bp.post("/jobs/<job_id>/apply")
-@role_required("alumni")
 def applyForJob(job_id):
     data = _payload()
     applicant = g.current_user
@@ -132,8 +118,6 @@ def applyForJob(job_id):
     return jsonify({"message": "Application submitted", "applicationID": application.applicationID}), 201
 
 
-@alumni_bp.post("/jobs")
-@role_required("alumni")
 def postJobListing():
     data = _payload()
     required = ["boardID", "title", "company", "description", "expiryDate"]

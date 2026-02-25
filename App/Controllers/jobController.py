@@ -1,12 +1,9 @@
 from datetime import datetime
 
-from flask import Blueprint, g, jsonify, render_template, request
+from flask import g, jsonify, render_template, request
 
-from App.Controllers.userControllers import login_required, role_required
 from App.Models import Job, JobApplication
 from App.database import db
-
-job_bp = Blueprint("jobs", __name__, url_prefix="/jobs")
 
 
 def _payload():
@@ -46,15 +43,11 @@ def _build_job(data, alumni_id, admin_id):
     )
 
 
-@job_bp.get("")
-@login_required
 def list_jobs_page():
     jobs = Job.query.order_by(Job.postedDate.desc()).all()
     return render_template("jobs.html", jobs=jobs)
 
 
-@job_bp.post("")
-@role_required("alumni", "admin")
 def postJob():
     data = _payload()
     required = ["boardID", "title", "company", "description", "expiryDate"]
@@ -73,8 +66,6 @@ def postJob():
     return jsonify({"message": "Job posted", "job": _job_dict(job)}), 201
 
 
-@job_bp.patch("/<job_id>")
-@role_required("alumni", "admin")
 def updateJob(job_id):
     data = _payload()
     job = db.session.get(Job, job_id)
@@ -99,8 +90,6 @@ def updateJob(job_id):
     return jsonify({"message": "Job updated", "job": _job_dict(job)})
 
 
-@job_bp.post("/<job_id>/close")
-@role_required("alumni", "admin")
 def closeJob(job_id):
     job = db.session.get(Job, job_id)
     if not job:
@@ -113,8 +102,6 @@ def closeJob(job_id):
     return jsonify({"message": "Job closed", "jobID": job.jobID})
 
 
-@job_bp.get("/<job_id>/applications")
-@role_required("alumni", "admin")
 def receiveApplications(job_id):
     job = db.session.get(Job, job_id)
     if not job:
@@ -136,8 +123,6 @@ def receiveApplications(job_id):
     return jsonify({"jobID": job_id, "applications": payload})
 
 
-@job_bp.post("/<job_id>/withdraw")
-@role_required("alumni")
 def withdraw(job_id):
     application = JobApplication.query.filter_by(jobID=job_id, alumniID=g.current_user.userID).first()
     if not application:
