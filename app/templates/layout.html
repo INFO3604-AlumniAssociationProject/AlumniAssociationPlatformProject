@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/daisyui/2.45.0/full.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <title>{% block title %}Alumni Association{% endblock %}</title>
+</head>
+<body class="min-h-screen bg-base-100">
+  {% include "partials/navbar.html" %}
+  <div class="max-w-5xl mx-auto px-4 py-6">
+    {% include "partials/flash.html" %}
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>
