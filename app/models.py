@@ -236,7 +236,7 @@ class AdminSettings(db.Model):
 
     sponsored_per_page = db.Column(db.Integer, default=2)
     sponsorship_expiry_days = db.Column(db.Integer, default=7)
-    priority_fee_cents = db.Column(db.Integer, default=5000)  # $50.00
+    priority_fee_cents = db.Column(db.Integer, default=5000) 
 
     weight_trending = db.Column(db.Integer, default=50)
     weight_similarity = db.Column(db.Integer, default=50)
@@ -247,3 +247,82 @@ class AdminSettings(db.Model):
             self.sponsored_per_page = 2
         if self.sponsorship_expiry_days is None:
             self.sponsorship_expiry_days = 7
+
+# Messaging 
+class MessageRequest(db.Model):
+    __tablename__ = "message_requests"
+    id = db.Column(db.Integer, primary_key=True)
+    from_user_id = db.Column(db.Integer, db.ForeignKey("alumni_users.id"), nullable=False)
+    to_user_id = db.Column(db.Integer, db.ForeignKey("alumni_users.id"), nullable=False)
+    status = db.Column(db.String(20), default="pending")  # pending/accepted/rejected
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("from_user_id", "to_user_id", "status", name="uq_msg_req_pending_once"),
+    )
+
+
+class Thread(db.Model):
+    __tablename__ = "threads"
+    id = db.Column(db.Integer, primary_key=True)
+
+    # dming 1:1 thread
+    thread_type = db.Column(db.String(20), default="dm")  
+    community_id = db.Column(db.Integer, db.ForeignKey("communities.id"), nullable=True) 
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class ThreadParticipant(db.Model):
+    __tablename__ = "thread_participants"
+    id = db.Column(db.Integer, primary_key=True)
+    thread_id = db.Column(db.Integer, db.ForeignKey("threads.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("alumni_users.id"), nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("thread_id", "user_id", name="uq_thread_participant"),
+    )
+
+
+class Message(db.Model):
+    __tablename__ = "messages"
+    id = db.Column(db.Integer, primary_key=True)
+    thread_id = db.Column(db.Integer, db.ForeignKey("threads.id"), nullable=False)
+    sender_id = db.Column(db.Integer, db.ForeignKey("alumni_users.id"), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+# Networking / Connections
+class ConnectionRequest(db.Model):
+    __tablename__ = "connection_requests"
+    id = db.Column(db.Integer, primary_key=True)
+    from_user_id = db.Column(db.Integer, db.ForeignKey("alumni_users.id"), nullable=False)
+    to_user_id = db.Column(db.Integer, db.ForeignKey("alumni_users.id"), nullable=False)
+    status = db.Column(db.String(20), default="pending")  # pending/accepted/rejected
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("from_user_id", "to_user_id", "status", name="uq_conn_req_pending_once"),
+    )
+
+
+class Connection(db.Model):
+    __tablename__ = "connections"
+    id = db.Column(db.Integer, primary_key=True)
+    user_a = db.Column(db.Integer, db.ForeignKey("alumni_users.id"), nullable=False)
+    user_b = db.Column(db.Integer, db.ForeignKey("alumni_users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("user_a", "user_b", name="uq_connection_pair"),
+    )
+
+    @staticmethod
+    def normalize_pair(u1: int, u2: int):
+        return (u1, u2) if u1 < u2 else (u2, u1)
+
+    @staticmethod
+    def are_connected(u1: int, u2: int) -> bool:
+        a, b = Connection.normalize_pair(u1, u2)
+        return Connection.query.filter_by(user_a=a, user_b=b).first() is not None
