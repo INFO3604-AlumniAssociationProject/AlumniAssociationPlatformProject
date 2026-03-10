@@ -1,4 +1,4 @@
-```from datetime import date, time
+from datetime import date, time
 
 import click
 from werkzeug.security import generate_password_hash
@@ -516,5 +516,5 @@ def create_user_command(email, password, name, role, graduation_year, faculty, d
         click.echo(f"Error: {str(e)}")
         return
     except Exception as e:
-        click.echo(f"Unexpected error: {str(e)}")```
+        click.echo(f"Unexpected error: {str(e)}")
         return
