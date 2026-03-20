@@ -1,12 +1,11 @@
 from functools import wraps
 
-from flask import Blueprint, g, jsonify, redirect, render_template, request, session, url_for
+from flask import g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from App.Controllers.auth import authenticate_user, decode_access_token, extract_bearer_token, issue_access_token
 from App.Models import Admin, Alumni, Profile, User
 from App.database import db
-
-user_bp = Blueprint("users", __name__)
 
 
 def _payload():
@@ -14,6 +13,8 @@ def _payload():
 
 
 def _wants_json():
+    if request.path.startswith("/api/"):
+        return True
     if request.is_json:
         return True
     accepted = request.accept_mimetypes
@@ -28,7 +29,99 @@ def _to_bool(value, default=False):
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def create_user(email, password, name, role, **kwargs):
+    """
+    Create a new user (Alumni or Admin).
+    
+    Args:
+        email: User email (must be unique)
+        password: User password (will be hashed)
+        name: User full name
+        role: 'alumni' or 'admin'
+        **kwargs: Role-specific fields
+        
+    Returns:
+        User object (Alumni or Admin instance)
+        
+    Raises:
+        ValueError: If email exists or invalid role
+    """
+    email = email.strip().lower()
+    if User.query.filter_by(email=email).first():
+        raise ValueError(f"Email already registered: {email}")
+    
+    role = role.strip().lower()
+    if role not in {"alumni", "admin"}:
+        raise ValueError(f"Invalid role: {role}. Must be 'alumni' or 'admin'")
+    
+    if role == "alumni":
+        # Required alumni fields
+        required_fields = ["graduationYear", "faculty", "degree"]
+        missing = [f for f in required_fields if f not in kwargs]
+        if missing:
+            raise ValueError(f"Missing alumni fields: {', '.join(missing)}")
+        
+        user = Alumni(
+            email=email,
+            password=generate_password_hash(password),
+            name=name.strip(),
+            role="alumni",
+            graduationYear=int(kwargs["graduationYear"]),
+            faculty=kwargs["faculty"].strip(),
+            degree=kwargs["degree"].strip(),
+            currentJobTitle=(kwargs.get("currentJobTitle") or "").strip(),
+            company=(kwargs.get("company") or "").strip(),
+            isPublicProfile=_to_bool(kwargs.get("isPublicProfile"), default=True),
+            isApproved=False,
+            notificationPreferences={
+                "email": True,
+                "events": True,
+                "jobs": True,
+                "messages": True,
+            },
+        )
+        db.session.add(user)
+        db.session.flush()
+        # Create associated profile
+        db.session.add(Profile(alumniID=user.alumniID))
+    else:
+        # Required admin fields
+        required_fields = ["adminLevel", "department"]
+        missing = [f for f in required_fields if f not in kwargs]
+        if missing:
+            raise ValueError(f"Missing admin fields: {', '.join(missing)}")
+        
+        user = Admin(
+            email=email,
+            password=generate_password_hash(password),
+            name=name.strip(),
+            role="admin",
+            adminLevel=kwargs["adminLevel"].strip(),
+            department=kwargs["department"].strip(),
+            isApproved=True,
+            notificationPreferences={
+                "email": True,
+                "moderation": True,
+                "reports": True,
+            },
+        )
+        db.session.add(user)
+    
+    db.session.commit()
+    return user
+
+
 def get_current_user():
+    token = extract_bearer_token(request)
+    if token:
+        payload, _error = decode_access_token(token)
+        if payload:
+            user = db.session.get(User, payload.get("sub"))
+            if user:
+                g.jwt_payload = payload
+                return user
+            return None
+
     user_id = session.get("user_id")
     if not user_id:
         return None
@@ -76,31 +169,25 @@ def _user_dict(user):
     }
 
 
-@user_bp.get("/")
 def home():
     if get_current_user():
         return redirect(url_for("users.dashboard"))
     return render_template("welcome.html")
 
 
-@user_bp.get("/login")
 def login_page():
     return render_template("login.html")
 
 
-@user_bp.get("/register")
 def register_page():
     return render_template("register.html")
 
 
-@user_bp.get("/dashboard")
-@login_required
 def dashboard():
     user = g.current_user
     return render_template("dashboard.html", user=user)
 
 
-@user_bp.post("/users/register")
 def register_user():
     data = _payload()
     required = ["email", "password", "name", "role"]
@@ -166,11 +253,16 @@ def register_user():
         db.session.add(user)
 
     db.session.commit()
-    session["user_id"] = user.userID
-    return jsonify({"message": "Registration successful", "user": _user_dict(user)}), 201
+
+    response_payload = {"message": "Registration successful", "user": _user_dict(user)}
+    if user.isApproved:
+        session["user_id"] = user.userID
+        response_payload["token"] = issue_access_token(user)
+    else:
+        response_payload["message"] = "Registration successful. Account pending admin approval."
+    return jsonify(response_payload), 201
 
 
-@user_bp.post("/users/login")
 def login():
     data = _payload()
     email = (data.get("email") or "").strip().lower()
@@ -179,19 +271,18 @@ def login():
     if not email or not password:
         return jsonify({"error": "Email and password are required"}), 400
 
-    user = User.query.filter_by(email=email).first()
-    if not user or not check_password_hash(user.password, password):
+    user = authenticate_user(email, password)
+    if not user:
         return jsonify({"error": "Invalid email or password"}), 401
 
     if user.role == "alumni" and not user.isApproved:
         return jsonify({"error": "Account pending admin approval"}), 403
 
     session["user_id"] = user.userID
-    return jsonify({"message": "Login successful", "user": _user_dict(user)})
+    token = issue_access_token(user)
+    return jsonify({"message": "Login successful", "token": token, "user": _user_dict(user)})
 
 
-@user_bp.post("/users/logout")
-@login_required
 def logout():
     session.clear()
     if _wants_json():
@@ -199,8 +290,6 @@ def logout():
     return redirect(url_for("users.login_page"))
 
 
-@user_bp.patch("/users/profile")
-@login_required
 def updateProfile():
     data = _payload()
     user = g.current_user
@@ -221,8 +310,6 @@ def updateProfile():
     return jsonify({"message": "Profile updated", "user": _user_dict(user)})
 
 
-@user_bp.post("/users/reset-password")
-@login_required
 def resetPassword():
     data = _payload()
     old_password = data.get("oldPassword") or ""
@@ -241,8 +328,6 @@ def resetPassword():
     return jsonify({"message": "Password reset successful"})
 
 
-@user_bp.post("/users/notifications")
-@login_required
 def sendNotification():
     data = _payload()
     user = g.current_user
@@ -267,15 +352,11 @@ def sendNotification():
     )
 
 
-@user_bp.get("/users/notifications/preferences")
-@login_required
 def getNotificationPreferences():
     user = g.current_user
     return jsonify({"preferences": user.notificationPreferences or {}})
 
 
-@user_bp.patch("/users/notifications/preferences")
-@login_required
 def update_notification_preferences():
     data = _payload()
     user = g.current_user
@@ -291,7 +372,5 @@ def update_notification_preferences():
     return jsonify({"message": "Notification preferences updated", "preferences": existing})
 
 
-@user_bp.get("/users/me")
-@login_required
 def me():
     return jsonify({"user": _user_dict(g.current_user)})
