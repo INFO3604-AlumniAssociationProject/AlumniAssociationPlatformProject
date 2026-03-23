@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, g, jsonify, render_template, request
 
 from .userController import login_required, role_required
 from ..Models import Event, EventRegistration, Message
@@ -20,6 +20,7 @@ def _event_dict(event):
         "description": event.description,
         "date": event.date.isoformat(),
         "time": event.time.isoformat(),
+        "time12": event.time.strftime("%I:%M %p").lstrip("0"),
         "location": event.location,
         "maxAttendees": event.maxAttendees,
         "status": event.status,
@@ -54,10 +55,8 @@ def listAllEventsAPI():
 @event_bp.post("")
 @role_required("alumni", "admin")
 def createEvent():
-    from flask import g
-
     data = _payload()
-    required = ["title", "description", "date", "time", "location", "maxAttendees", "boardID"]
+    required = ["title", "date", "time", "location", "maxAttendees", "boardID"]
     missing = [field for field in required if not data.get(field)]
     if missing:
         return jsonify({"error": f"Missing fields: {', '.join(missing)}"}), 400
@@ -72,7 +71,7 @@ def createEvent():
         alumniID=g.current_user.userID,
         boardID=data["boardID"],
         title=data["title"].strip(),
-        description=data["description"].strip(),
+        description=(data.get("description") or "").strip(),
         date=event_date,
         time=event_time,
         location=data["location"].strip(),
@@ -88,9 +87,11 @@ def createEvent():
 @role_required("admin", "alumni")
 def registerAttendee(event_id):
     data = _payload()
-    attendee_id = (data.get("attendeeID") or "").strip()
+    attendee_id = (data.get("attendeeID") or g.current_user.userID).strip()
     if not attendee_id:
         return jsonify({"error": "attendeeID is required"}), 400
+    if g.current_user.role != "admin" and attendee_id != g.current_user.userID:
+        return jsonify({"error": "Alumni can only register themselves"}), 403
 
     event = db.session.get(Event, event_id)
     if not event or event.status != "active":
@@ -111,12 +112,56 @@ def registerAttendee(event_id):
     return jsonify({"message": "Attendee registered", "registrationID": registration.registrationID}), 201
 
 
+@event_bp.post("/<event_id>/unregister-attendee")
+@role_required("admin", "alumni")
+def unregisterAttendee(event_id):
+    data = _payload()
+    attendee_id = (data.get("attendeeID") or g.current_user.userID).strip()
+    if not attendee_id:
+        return jsonify({"error": "attendeeID is required"}), 400
+    if g.current_user.role != "admin" and attendee_id != g.current_user.userID:
+        return jsonify({"error": "Alumni can only cancel their own registration"}), 403
+
+    registration = EventRegistration.query.filter_by(eventID=event_id, attendeeID=attendee_id, status="registered").first()
+    if not registration:
+        return jsonify({"error": "Registration not found"}), 404
+
+    registration.status = "cancelled"
+    db.session.commit()
+    return jsonify({"message": "Registration cancelled", "registrationID": registration.registrationID})
+
+
+@event_bp.get("/registrations/me")
+@role_required("alumni", "admin")
+def myRegistrations():
+    registrations = (
+        EventRegistration.query.filter_by(attendeeID=g.current_user.userID, status="registered")
+        .order_by(EventRegistration.registrationDate.desc())
+        .all()
+    )
+    return jsonify(
+        {
+            "eventIDs": [registration.eventID for registration in registrations],
+            "registrations": [
+                {
+                    "registrationID": registration.registrationID,
+                    "eventID": registration.eventID,
+                    "status": registration.status,
+                }
+                for registration in registrations
+            ],
+        }
+    )
+
+
 @event_bp.post("/<event_id>/cancel")
 @role_required("admin", "alumni")
 def cancelEvent(event_id):
     event = db.session.get(Event, event_id)
     if not event:
         return jsonify({"error": "Event not found"}), 404
+    if g.current_user.role != "admin" and event.alumniID != g.current_user.userID:
+        return jsonify({"error": "Only the event creator or admin can cancel this event"}), 403
 
     event.status = "cancelled"
     db.session.commit()
@@ -126,18 +171,18 @@ def cancelEvent(event_id):
 @event_bp.post("/<event_id>/send-reminders")
 @role_required("admin", "alumni")
 def sendReminders(event_id):
-    from flask import g
-
     event = db.session.get(Event, event_id)
     if not event:
         return jsonify({"error": "Event not found"}), 404
+    if g.current_user.role != "admin" and event.alumniID != g.current_user.userID:
+        return jsonify({"error": "Only the event creator or admin can send reminders"}), 403
 
     registrations = EventRegistration.query.filter_by(eventID=event_id, status="registered").all()
     for registration in registrations:
         reminder = Message(
             senderID=g.current_user.userID,
             receiverID=registration.attendeeID,
-            content=f"Reminder: {event.title} is on {event.date.isoformat()} at {event.time.strftime('%H:%M')}.",
+            content=f"Reminder: {event.title} is on {event.date.isoformat()} at {event.time.strftime('%I:%M %p').lstrip('0')}.",
             status="sent",
             attachments=[],
         )

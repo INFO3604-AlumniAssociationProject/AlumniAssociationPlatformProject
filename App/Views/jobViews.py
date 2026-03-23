@@ -18,6 +18,7 @@ def _job_dict(job):
         "jobID": job.jobID,
         "boardID": job.boardID,
         "alumniID": job.alumniID,
+        "posterName": job.poster.name if job.poster else None,
         "adminID": job.adminID,
         "title": job.title,
         "company": job.company,
@@ -27,6 +28,16 @@ def _job_dict(job):
         "postedDate": job.postedDate.isoformat(),
         "expiryDate": job.expiryDate.isoformat(),
         "status": job.status,
+    }
+
+
+def _application_dict(application):
+    return {
+        "applicationID": application.applicationID,
+        "jobID": application.jobID,
+        "alumniID": application.alumniID,
+        "status": application.status,
+        "applicationDate": application.applicationDate.isoformat(),
     }
 
 
@@ -90,6 +101,53 @@ def listAllJobsAPI():
     return jsonify({"jobs": [_job_dict(job) for job in jobs]})
 
 
+@job_bp.get("/applied/me")
+@role_required("alumni", "admin")
+def myApplications():
+    # Admin dashboard does not need a "my applications" list.
+    if g.current_user.role == "admin":
+        return jsonify({"jobIDs": [], "applications": []})
+
+    applications = (
+        JobApplication.query.filter_by(alumniID=g.current_user.userID)
+        .order_by(JobApplication.applicationDate.desc())
+        .all()
+    )
+    active = [app for app in applications if app.status != "withdrawn"]
+    return jsonify(
+        {
+            "jobIDs": [app.jobID for app in active],
+            "applications": [_application_dict(app) for app in active],
+        }
+    )
+
+
+@job_bp.post("/<job_id>/apply")
+@role_required("alumni")
+def apply(job_id):
+    job = db.session.get(Job, job_id)
+    if not job or job.status != "open":
+        return jsonify({"error": "Job not available"}), 404
+
+    existing = JobApplication.query.filter_by(jobID=job_id, alumniID=g.current_user.userID).first()
+    if existing:
+        if existing.status == "withdrawn":
+            existing.status = "pending"
+            existing.applicationDate = datetime.utcnow()
+            db.session.commit()
+            return jsonify({"message": "Application re-submitted", "application": _application_dict(existing)})
+        return jsonify({"message": "You have already applied", "application": _application_dict(existing)})
+
+    application = JobApplication(
+        jobID=job_id,
+        alumniID=g.current_user.userID,
+        status="pending",
+    )
+    db.session.add(application)
+    db.session.commit()
+    return jsonify({"message": "Application submitted", "application": _application_dict(application)}), 201
+
+
 @job_bp.patch("/<job_id>")
 @role_required("alumni", "admin")
 def updateJob(job_id):
@@ -139,14 +197,15 @@ def receiveApplications(job_id):
     if g.current_user.role != "admin" and job.alumniID != g.current_user.userID:
         return jsonify({"error": "Only the owner or admin can view applications"}), 403
 
-    applications = JobApplication.query.filter_by(jobID=job_id).order_by(JobApplication.appliedDate.desc()).all()
+    applications = JobApplication.query.filter_by(jobID=job_id).order_by(JobApplication.applicationDate.desc()).all()
     payload = [
         {
             "applicationID": app.applicationID,
             "alumniID": app.alumniID,
-            "coverLetter": app.coverLetter,
+            "applicantName": app.applicant.name if app.applicant else app.alumniID,
+            "coverLetter": "",
             "status": app.status,
-            "appliedDate": app.appliedDate.isoformat(),
+            "appliedDate": app.applicationDate.isoformat(),
         }
         for app in applications
     ]
