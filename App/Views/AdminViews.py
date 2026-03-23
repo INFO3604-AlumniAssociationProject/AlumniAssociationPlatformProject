@@ -1,297 +1,150 @@
-from functools import wraps
+from flask import Blueprint, jsonify, render_template, request
 
-from flask import Blueprint, g, jsonify, redirect, render_template, request, session, url_for
-from werkzeug.security import check_password_hash, generate_password_hash
+from .userController import role_required
+from ..Models import Event, Job, Message, User
+from ..database import db
 
-from App.Models import Admin, Alumni, Profile, User
-from App.database import db
-
-user_bp = Blueprint("users", __name__)
+admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
 def _payload():
     return request.get_json(silent=True) or request.form.to_dict(flat=True)
 
 
-def _wants_json():
-    if request.is_json:
-        return True
-    accepted = request.accept_mimetypes
-    return accepted.best == "application/json" and accepted["application/json"] >= accepted["text/html"]
+@admin_bp.post("/users/<user_id>/approve")
+@role_required("admin")
+def approveUser(user_id):
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    user.isApproved = True
+    db.session.commit()
+    return jsonify({"message": "User approved", "userID": user.userID})
 
 
-def _to_bool(value, default=False):
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+@admin_bp.post("/moderate")
+@role_required("admin")
+def moderateContent():
+    data = _payload()
+    content_type = (data.get("type") or "").strip().lower()
+    content_id = (data.get("id") or "").strip()
+    action = (data.get("action") or "").strip().lower()
+
+    model_map = {"job": Job, "event": Event, "message": Message}
+    model = model_map.get(content_type)
+    if not model:
+        return jsonify({"error": "type must be one of: job, event, message"}), 400
+
+    record = db.session.get(model, content_id)
+    if not record:
+        return jsonify({"error": "Content not found"}), 404
+
+    status_map = {"approve": "approved", "hide": "hidden", "reject": "rejected"}
+    if action not in status_map:
+        return jsonify({"error": "action must be approve, hide, or reject"}), 400
+
+    if hasattr(record, "status"):
+        record.status = status_map[action]
+    db.session.commit()
+    return jsonify({"message": f"{content_type} {action}d", "id": content_id})
 
 
-def get_current_user():
-    user_id = session.get("user_id")
-    if not user_id:
-        return None
-    return db.session.get(User, user_id)
-
-
-def login_required(view_func):
-    @wraps(view_func)
-    def wrapped(*args, **kwargs):
-        user = get_current_user()
-        if not user:
-            if _wants_json():
-                return jsonify({"error": "Authentication required"}), 401
-            return redirect(url_for("users.login_page"))
-        g.current_user = user
-        return view_func(*args, **kwargs)
-
-    return wrapped
-
-
-def role_required(*roles):
-    def decorator(view_func):
-        @wraps(view_func)
-        @login_required
-        def wrapped(*args, **kwargs):
-            user = g.current_user
-            if user.role not in roles:
-                return jsonify({"error": "Insufficient permissions"}), 403
-            return view_func(*args, **kwargs)
-
-        return wrapped
-
-    return decorator
-
-
-def _user_dict(user):
-    return {
-        "userID": user.userID,
-        "email": user.email,
-        "name": user.name,
-        "registrationDate": user.registrationDate.isoformat(),
-        "role": user.role,
-        "isApproved": user.isApproved,
-        "notificationPreferences": user.notificationPreferences or {},
+@admin_bp.get("/reports")
+@role_required("admin")
+def generateReport():
+    report = {
+        "users": {
+            "total": User.query.count(),
+            "pendingApproval": User.query.filter_by(role="alumni", isApproved=False).count(),
+            "alumni": User.query.filter_by(role="alumni").count(),
+            "admins": User.query.filter_by(role="admin").count(),
+        },
+        "jobs": {
+            "total": Job.query.count(),
+            "open": Job.query.filter_by(status="open").count(),
+            "closed": Job.query.filter_by(status="closed").count(),
+        },
+        "events": {
+            "total": Event.query.count(),
+            "active": Event.query.filter_by(status="active").count(),
+            "cancelled": Event.query.filter_by(status="cancelled").count(),
+        },
+        "messages": {
+            "total": Message.query.count(),
+            "requested": Message.query.filter_by(status="requested").count(),
+        },
     }
+    return jsonify({"report": report})
 
 
-@user_bp.get("/")
-def home():
-    if get_current_user():
-        return redirect(url_for("users.dashboard"))
-    return render_template("welcome.html")
-
-
-@user_bp.get("/login")
-def login_page():
-    return render_template("login.html")
-
-
-@user_bp.get("/register")
-def register_page():
-    return render_template("register.html")
-
-
-@user_bp.get("/dashboard")
-@login_required
-def dashboard():
-    user = g.current_user
-    return render_template("dashboard.html", user=user)
-
-
-@user_bp.post("/users/register")
-def register_user():
+@admin_bp.post("/events/<event_id>/manage")
+@role_required("admin")
+def manageEvent(event_id):
     data = _payload()
-    required = ["email", "password", "name", "role"]
-    missing = [field for field in required if not data.get(field)]
-    if missing:
-        return jsonify({"error": f"Missing fields: {', '.join(missing)}"}), 400
+    event = db.session.get(Event, event_id)
+    if not event:
+        return jsonify({"error": "Event not found"}), 404
 
-    if User.query.filter_by(email=data["email"].strip().lower()).first():
-        return jsonify({"error": "Email already registered"}), 409
-
-    role = data["role"].strip().lower()
-    if role not in {"alumni", "admin"}:
-        return jsonify({"error": "Role must be alumni or admin"}), 400
-
-    if role == "alumni":
-        alumni_required = ["graduationYear", "faculty", "degree"]
-        missing = [field for field in alumni_required if not data.get(field)]
-        if missing:
-            return jsonify({"error": f"Missing alumni fields: {', '.join(missing)}"}), 400
-
-        user = Alumni(
-            email=data["email"].strip().lower(),
-            password=generate_password_hash(data["password"]),
-            name=data["name"].strip(),
-            role="alumni",
-            graduationYear=int(data["graduationYear"]),
-            faculty=data["faculty"].strip(),
-            degree=data["degree"].strip(),
-            currentJobTitle=(data.get("currentJobTitle") or "").strip(),
-            company=(data.get("company") or "").strip(),
-            isPublicProfile=_to_bool(data.get("isPublicProfile"), default=True),
-            isApproved=False,
-            notificationPreferences={
-                "email": True,
-                "events": True,
-                "jobs": True,
-                "messages": True,
-            },
-        )
-        db.session.add(user)
-        db.session.flush()
-        db.session.add(Profile(alumniID=user.alumniID))
+    action = (data.get("action") or "").strip().lower()
+    if action == "cancel":
+        event.status = "cancelled"
+        result = "cancelled"
+    elif action == "reopen":
+        event.status = "active"
+        result = "reopened"
     else:
-        admin_required = ["adminLevel", "department"]
-        missing = [field for field in admin_required if not data.get(field)]
-        if missing:
-            return jsonify({"error": f"Missing admin fields: {', '.join(missing)}"}), 400
+        return jsonify({"error": "action must be cancel or reopen"}), 400
 
-        user = Admin(
-            email=data["email"].strip().lower(),
-            password=generate_password_hash(data["password"]),
-            name=data["name"].strip(),
-            role="admin",
-            adminLevel=data["adminLevel"].strip(),
-            department=data["department"].strip(),
-            isApproved=True,
-            notificationPreferences={
-                "email": True,
-                "moderation": True,
-                "reports": True,
-            },
+    db.session.commit()
+    return jsonify({"message": f"Event {result}", "eventID": event.eventID, "status": event.status})
+
+
+@admin_bp.post("/announcements")
+@role_required("admin")
+def sendAnnouncement():
+    from flask import g
+
+    data = _payload()
+    content = (data.get("content") or "").strip()
+    if not content:
+        return jsonify({"error": "content is required"}), 400
+
+    recipients = User.query.filter(User.role == "alumni", User.isApproved.is_(True)).all()
+    created = []
+    for recipient in recipients:
+        message = Message(
+            senderID=g.current_user.userID,
+            receiverID=recipient.userID,
+            content=content,
+            status="sent",
+            attachments=[],
         )
-        db.session.add(user)
+        db.session.add(message)
+        created.append(recipient.userID)
 
     db.session.commit()
-    session["user_id"] = user.userID
-    return jsonify({"message": "Registration successful", "user": _user_dict(user)}), 201
+    return jsonify({"message": "Announcement sent", "recipientCount": len(created)})
 
 
-@user_bp.post("/users/login")
-def login():
-    data = _payload()
-    email = (data.get("email") or "").strip().lower()
-    password = data.get("password") or ""
-
-    if not email or not password:
-        return jsonify({"error": "Email and password are required"}), 400
-
-    user = User.query.filter_by(email=email).first()
-    if not user or not check_password_hash(user.password, password):
-        return jsonify({"error": "Invalid email or password"}), 401
-
-    if user.role == "alumni" and not user.isApproved:
-        return jsonify({"error": "Account pending admin approval"}), 403
-
-    session["user_id"] = user.userID
-    return jsonify({"message": "Login successful", "user": _user_dict(user)})
-
-
-@user_bp.post("/users/logout")
-@login_required
-def logout():
-    session.clear()
-    if _wants_json():
-        return jsonify({"message": "Logged out successfully"})
-    return redirect(url_for("users.login_page"))
-
-
-@user_bp.patch("/users/profile")
-@login_required
-def updateProfile():
-    data = _payload()
-    user = g.current_user
-
-    new_name = data.get("name")
-    new_email = data.get("email")
-
-    if new_name:
-        user.name = new_name.strip()
-    if new_email:
-        normalized = new_email.strip().lower()
-        existing = User.query.filter(User.email == normalized, User.userID != user.userID).first()
-        if existing:
-            return jsonify({"error": "Email already in use"}), 409
-        user.email = normalized
-
-    db.session.commit()
-    return jsonify({"message": "Profile updated", "user": _user_dict(user)})
-
-
-@user_bp.post("/users/reset-password")
-@login_required
-def resetPassword():
-    data = _payload()
-    old_password = data.get("oldPassword") or ""
-    new_password = data.get("newPassword") or ""
-    user = g.current_user
-
-    if not old_password or not new_password:
-        return jsonify({"error": "Both oldPassword and newPassword are required"}), 400
-    if not check_password_hash(user.password, old_password):
-        return jsonify({"error": "Current password is incorrect"}), 400
-    if len(new_password) < 8:
-        return jsonify({"error": "New password must be at least 8 characters"}), 400
-
-    user.password = generate_password_hash(new_password)
-    db.session.commit()
-    return jsonify({"message": "Password reset successful"})
-
-
-@user_bp.post("/users/notifications")
-@login_required
-def sendNotification():
-    data = _payload()
-    user = g.current_user
-    preferences = user.notificationPreferences or {}
-
-    channel = (data.get("channel") or "email").strip().lower()
-    message = (data.get("message") or "").strip()
-    if not message:
-        return jsonify({"error": "message is required"}), 400
-    if not preferences.get(channel, False):
-        return jsonify({"error": f"{channel} notifications are disabled"}), 400
-
-    return jsonify(
-        {
-            "message": "Notification queued",
-            "notification": {
-                "to": user.email,
-                "channel": channel,
-                "content": message,
-            },
-        }
-    )
-
-
-@user_bp.get("/users/notifications/preferences")
-@login_required
-def getNotificationPreferences():
-    user = g.current_user
-    return jsonify({"preferences": user.notificationPreferences or {}})
-
-
-@user_bp.patch("/users/notifications/preferences")
-@login_required
-def update_notification_preferences():
-    data = _payload()
-    user = g.current_user
-    existing = user.notificationPreferences or {}
-
-    allowed_keys = {"email", "events", "jobs", "messages", "moderation", "reports"}
-    for key, value in data.items():
-        if key in allowed_keys:
-            existing[key] = _to_bool(value, default=bool(existing.get(key)))
-
-    user.notificationPreferences = existing
-    db.session.commit()
-    return jsonify({"message": "Notification preferences updated", "preferences": existing})
-
-
-@user_bp.get("/users/me")
-@login_required
-def me():
-    return jsonify({"user": _user_dict(g.current_user)})
+@admin_bp.get("/panel")
+@role_required("admin")
+def admin_panel():
+    report = {
+        "users": {
+            "total": User.query.count(),
+            "pendingApproval": User.query.filter_by(role="alumni", isApproved=False).count(),
+        },
+        "jobs": {
+            "total": Job.query.count(),
+            "open": Job.query.filter_by(status="open").count(),
+        },
+        "events": {
+            "total": Event.query.count(),
+            "active": Event.query.filter_by(status="active").count(),
+        },
+        "messages": {
+            "total": Message.query.count(),
+            "requested": Message.query.filter_by(status="requested").count(),
+        },
+    }
+    return render_template("admin.html", report=report)
