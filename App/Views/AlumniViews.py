@@ -1,9 +1,9 @@
 from flask import Blueprint, g, jsonify, render_template, request
 from sqlalchemy import or_
 
-from App.Views.userController import role_required
-from App.Models import Alumni, Event, EventRegistration, Job, JobApplication, Message
-from App.database import db
+from .userController import role_required
+from ..Models import Alumni, Event, EventRegistration, Job, JobApplication, Message
+from ..database import db
 
 alumni_bp = Blueprint("alumni", __name__, url_prefix="/alumni")
 
@@ -32,7 +32,7 @@ def alumni_home():
 
 
 @alumni_bp.get("/search")
-@role_required("alumni")
+@role_required("alumni", "admin")
 def searchAlumni():
     query = (request.args.get("q") or "").strip().lower()
     faculty = (request.args.get("faculty") or "").strip().lower()
@@ -112,7 +112,6 @@ def registerForEvent(event_id):
 @alumni_bp.post("/jobs/<job_id>/apply")
 @role_required("alumni")
 def applyForJob(job_id):
-    data = _payload()
     applicant = g.current_user
     job = db.session.get(Job, job_id)
     if not job or job.status != "open":
@@ -120,12 +119,16 @@ def applyForJob(job_id):
 
     existing = JobApplication.query.filter_by(jobID=job_id, alumniID=applicant.userID).first()
     if existing:
+        if existing.status == "withdrawn":
+            existing.status = "pending"
+            db.session.commit()
+            return jsonify({"message": "Application re-submitted", "applicationID": existing.applicationID})
         return jsonify({"message": "You have already applied", "applicationID": existing.applicationID})
 
     application = JobApplication(
         jobID=job_id,
         alumniID=applicant.userID,
-        coverLetter=(data.get("coverLetter") or "").strip(),
+        status="pending",
     )
     db.session.add(application)
     db.session.commit()
@@ -141,7 +144,7 @@ def postJobListing():
     if missing:
         return jsonify({"error": f"Missing fields: {', '.join(missing)}"}), 400
 
-    from App.Views.jobController import _build_job
+    from .jobViews import _build_job
 
     job = _build_job(data=data, alumni_id=g.current_user.userID, admin_id=None)
     db.session.add(job)

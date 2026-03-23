@@ -19,6 +19,8 @@ def register():
     data = _payload()
     event_id = (data.get("eventID") or "").strip()
     attendee_id = (data.get("attendeeID") or g.current_user.userID).strip()
+    if g.current_user.role != "admin" and attendee_id != g.current_user.userID:
+        return jsonify({"error": "Alumni can only register themselves"}), 403
 
     event = db.session.get(Event, event_id)
     if not event or event.status != "active":
@@ -48,6 +50,8 @@ def cancelRegistration(registration_id):
     registration = db.session.get(EventRegistration, registration_id)
     if not registration:
         return jsonify({"error": "Registration not found"}), 404
+    if g.current_user.role != "admin" and registration.attendeeID != g.current_user.userID:
+        return jsonify({"error": "Only the attendee or admin can cancel this registration"}), 403
 
     registration.status = "cancelled"
     db.session.commit()
