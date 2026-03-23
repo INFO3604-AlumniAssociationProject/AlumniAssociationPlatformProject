@@ -1,5 +1,5 @@
-from App.database import db
-from App.Models.user import User
+from ..database import db
+from .user import User
 
 class Alumni(User):
     __tablename__ = "alumni"
@@ -16,8 +16,10 @@ class Alumni(User):
     boards = db.relationship("CommunityBoard", back_populates="owner", lazy="dynamic")
     jobs = db.relationship("Job", back_populates="poster", lazy="dynamic")
     events = db.relationship("Event", back_populates="creator", lazy="dynamic")
+    posts = db.relationship("BoardPost", back_populates="author", lazy="dynamic")
+    applications = db.relationship("JobApplication", back_populates="applicant", lazy="dynamic")
 
     __mapper_args__ = {"polymorphic_identity": "alumni"}
 
     def __repr__(self):
-        return f'<Alumni {self.email} - {self.graduationYear}>'
+        return f'<Alumni {self.email } - {self.graduationYear}>'
