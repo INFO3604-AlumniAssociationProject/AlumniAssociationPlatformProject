@@ -1,4 +1,4 @@
-from App.database import db
+from ..database import db
 from datetime import date
 from uuid import uuid4
 
@@ -11,6 +11,7 @@ class Job(db.Model):
     adminID = db.Column(db.String(36), db.ForeignKey("admin.adminID"), nullable=True)
     title = db.Column(db.String(120), nullable=False)
     company = db.Column(db.String(120), nullable=False)
+    jobType = db.Column(db.String(50), nullable=False, default="Full-time")
     description = db.Column(db.Text, nullable=False)
     salaryRange = db.Column(db.String(50), nullable=True)
     location = db.Column(db.String(120), nullable=True)
