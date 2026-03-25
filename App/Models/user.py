@@ -28,7 +28,6 @@ class User(db.Model):
         back_populates="receiver",
         lazy="dynamic",
     )
-    posts = db.relationship("BoardPost", back_populates="author", lazy="dynamic")
 
     __mapper_args__ = {
         "polymorphic_on": role,
@@ -37,3 +36,4 @@ class User(db.Model):
 
     def __repr__(self):
         return f"<User {self.email}>"
+
