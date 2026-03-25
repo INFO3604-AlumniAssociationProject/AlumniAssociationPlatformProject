@@ -4,3 +4,6 @@ flask_migrate
 flask-cors
 werkzeug
 PyJWT
+gunicorn
+psycopg2-binary
+python-dotenv
