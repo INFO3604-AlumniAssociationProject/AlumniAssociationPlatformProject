@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 from flask import Flask
 from flask_cors import CORS
 from flask_migrate import Migrate
@@ -5,6 +8,24 @@ from flask_migrate import Migrate
 from .database import db
 
 migrate = Migrate()
+BASE_DIR = Path(__file__).resolve().parent
+
+
+def _build_cors_origins() -> list[str]:
+    env_origins = os.getenv("FRONTEND_ORIGINS")
+    if env_origins:
+        return [origin.strip() for origin in env_origins.split(",") if origin.strip()]
+
+    # Allow localhost, loopback, and typical private network ranges so others on the LAN can reach the API.
+    return [
+        r"https?://localhost(?::\d+)?",
+        r"https?://127\.0\.0\.1(?::\d+)?",
+        r"https?://\[::1\](?::\d+)?",
+        r"https?://192\.168\.\d+\.\d+(?::\d+)?",
+        r"https?://10\.\d+\.\d+\.\d+(?::\d+)?",
+        r"https?://172\.(1[6-9]|2\d|3[01])\.\d+\.\d+(?::\d+)?",
+    ]
+
 
 def create_app():
     app = Flask(__name__)
@@ -13,7 +34,11 @@ def create_app():
     app.config['SECRET_KEY'] = 'your-secret-key'
     app.config['TEMPLATES_AUTO_RELOAD'] = True
     app.config['PREFERRED_URL_SCHEME'] = 'https'
-    app.config['UPLOADED_PHOTOS_DEST'] = "App/uploads"
+
+    uploads_path = BASE_DIR / "uploads"
+    uploads_path.mkdir(parents=True, exist_ok=True)
+    app.config['UPLOADED_PHOTOS_DEST'] = str(uploads_path.resolve())
+
     app.config['JWT_ACCESS_COOKIE_NAME'] = 'access_token'
     app.config["JWT_TOKEN_LOCATION"] = ["cookies", "headers"]
     app.config["JWT_COOKIE_SECURE"] = True
@@ -24,18 +49,11 @@ def create_app():
     migrate.init_app(app, db)
     CORS(
         app,
-        resources={
-            r"/api/*": {
-                "origins": [
-                    "http://localhost:3000",
-                    "http://127.0.0.1:3000",
-                    "http://localhost:3001",
-                    "http://127.0.0.1:3001",
-                ],
-                "allow_headers": ["Authorization", "Content-Type"],
-                "supports_credentials": True,
-            }
-        },
+        resources={r"/api/*": {
+            "origins": _build_cors_origins(),
+            "allow_headers": ["Authorization", "Content-Type"],
+            "supports_credentials": True,
+        }},
     )
 
     # Register API routes under /api while preserving each blueprint prefix.

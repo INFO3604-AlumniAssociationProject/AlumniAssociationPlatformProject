@@ -3,10 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowLeft } from 'lucide-react';
 import { useToast } from '../components/Toast';
-
-const viteApiUrl = ((import.meta as any).env?.VITE_API_URL as string | undefined) || 'http://localhost:5000';
-const API_ROOT = viteApiUrl.replace(/\/$/, '');
-const API_BASE = API_ROOT.endsWith('/api') ? API_ROOT.slice(0, -4) : API_ROOT;
+import { API_BASE } from '../apiConfig';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -32,7 +29,7 @@ export default function Register() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE}/api/users/register`, {
+      const response = await fetch(`${API_BASE}/users/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

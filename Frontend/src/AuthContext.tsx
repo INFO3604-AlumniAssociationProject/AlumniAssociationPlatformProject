@@ -1,10 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { API_BASE } from './apiConfig';
 
 export type UserRole = 'admin' | 'alumni';
-
-const viteApiUrl = ((import.meta as any).env?.VITE_API_URL as string | undefined) || 'http://localhost:5000';
-const API_ROOT = viteApiUrl.replace(/\/$/, '');
-const API_BASE = API_ROOT.endsWith('/api') ? API_ROOT.slice(0, -4) : API_ROOT;
 
 const TOKEN_KEY = 'uwi_token';
 const USER_KEY = 'uwi_user';
@@ -58,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const response = await fetch(`${API_BASE}/api/users/me`, {
+        const response = await fetch(`${API_BASE}/users/me`, {
           headers: authHeader(token),
         });
 
@@ -91,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string, expectedRole?: UserRole) => {
-    const response = await fetch(`${API_BASE}/api/users/login`, {
+    const response = await fetch(`${API_BASE}/users/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -122,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     const token = getAuthToken();
     try {
-      await fetch(`${API_BASE}/api/users/logout`, {
+      await fetch(`${API_BASE}/users/logout`, {
         method: 'POST',
         headers: authHeader(token),
       });
