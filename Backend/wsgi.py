@@ -21,6 +21,13 @@ from App.Models import (
 app = create_app()
 
 
+@app.cli.command("init", help="Reset and seed the database.")
+def init_command():
+    with app.app_context():
+        initialize()
+    click.echo("database initialized")
+
+
 def initialize():
     """Reset and seed database with richer sample records."""
     db.drop_all()

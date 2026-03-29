@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { getAuthToken, useAuth } from './AuthContext';
+import { API_BASE } from './apiConfig';
 import UWILogo from './assets/UWILogo.jpg';
 // default cover used when nothing else is available
 const DEFAULT_COVER =
@@ -171,10 +172,6 @@ interface DataContextType {
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
-
-const viteApiUrl = ((import.meta as any).env?.VITE_API_URL as string | undefined) || 'http://localhost:5000';
-const API_ROOT = viteApiUrl.replace(/\/$/, '');
-const API_BASE = API_ROOT.endsWith('/api') ? API_ROOT : `${API_ROOT}/api`;
 
 const toId = (value: unknown): string => String(value ?? '');
 
