@@ -1,87 +1,147 @@
-from flask import g, jsonify, render_template, request
-
-from App.Controllers.userController import login_required, role_required
-from App.Models import BoardPost, CommunityBoard, Job
+from datetime import datetime
+from uuid import uuid4
 from App.database import db
+from App.Models import CommunityBoard, BoardPost, Job, Event, Alumni
 
 
-def _payload():
-    return request.get_json(silent=True) or request.form.to_dict(flat=True)
+def getAllPosts() -> list:
+    """Return all posts across all boards for the feed."""
+    return BoardPost.query.order_by(BoardPost.postedDate.desc()).all()
 
 
-def _job_dict(job):
-    return {
-        "jobID": job.jobID,
-        "title": job.title,
-        "company": job.company,
-        "location": job.location,
-        "salaryRange": job.salaryRange,
-        "status": job.status,
-        "expiryDate": job.expiryDate.isoformat(),
-    }
-    
-def list_boards():
-    boards = CommunityBoard.query.order_by(CommunityBoard.name.asc()).all()
-    return jsonify(
-        {
-            "boards": [
-                {"boardID": b.boardID, "name": b.name, "description": b.description}
-                for b in boards
-            ]
-        }
-    )
+def _getBoard(board_id: str) -> CommunityBoard:
+    board = db.session.get(CommunityBoard, board_id)
+    if not board:
+        raise ValueError("Board not found")
+    return board
 
 
-def create_board():
-    data = _payload()
-    name = (data.get("name") or "").strip()
-    if not name:
-        return jsonify({"error": "name is required"}), 400
+def _boardMemberIds(board: CommunityBoard) -> list[str]:
+    return list({*(board.memberIDs or []), board.alumniID})
 
+
+def _requireBoardMember(board: CommunityBoard, alumni_id: str) -> None:
+    if alumni_id not in _boardMemberIds(board):
+        raise PermissionError("Join the board before contributing")
+
+
+def _parseDate(value: str, field_name: str):
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name} must be YYYY-MM-DD")
+
+
+def _parseTime(value: str):
+    try:
+        return datetime.strptime(value, "%H:%M").time()
+    except (TypeError, ValueError):
+        raise ValueError("time must be HH:MM")
+
+def getBoardMembers(board_id: str) -> list:
+    """Return list of members (alumni) for a board."""
+    board = _getBoard(board_id)
+    member_ids = _boardMemberIds(board)
+    members = []
+    for uid in member_ids:
+        alumni = db.session.get(Alumni, uid)
+        if alumni:
+            members.append({
+                "userID": alumni.alumniID,
+                "name": alumni.name,
+                "email": alumni.email,
+                "role": "alumni",
+                "avatar": f"https://ui-avatars.com/api/?name={alumni.name}&background=random",
+                "isAdmin": (uid == board.alumniID)
+            })
+    return members
+
+def createBoard(owner_id: str, name: str, description: str = None) -> str:
+    if not name or not name.strip():
+        raise ValueError("name is required")
     board = CommunityBoard(
-        alumniID=g.current_user.userID,
-        name=name,
-        description=(data.get("description") or "").strip(),
+        boardID=str(uuid4()),
+        alumniID=owner_id,
+        name=name.strip(),
+        description=description.strip() if description else None,
+        memberIDs=[owner_id],
     )
     db.session.add(board)
     db.session.commit()
-    return jsonify({"message": "Board created", "boardID": board.boardID}), 201
+    return board.boardID
 
 
-def board_page(board_id):
+def joinBoard(alumni_id: str, board_id: str) -> None:
     board = db.session.get(CommunityBoard, board_id)
     if not board:
-        return jsonify({"error": "Board not found"}), 404
+        raise ValueError("Board not found")
+    members = board.memberIDs or []
+    if alumni_id in members or alumni_id == board.alumniID:
+        raise ValueError("Already a member of the board")
+    members.append(alumni_id)
+    board.memberIDs = members
+    db.session.commit()
 
-    posts = (
-        BoardPost.query.filter_by(boardID=board_id, status="active")
-        .order_by(BoardPost.createdAt.desc())
-        .limit(20)
-        .all()
+
+def leaveBoard(alumni_id: str, board_id: str) -> None:
+    board = db.session.get(CommunityBoard, board_id)
+    if not board:
+        raise ValueError("Board not found")
+    if board.alumniID == alumni_id:
+        raise ValueError("Community admin cannot leave their own board")
+    members = board.memberIDs or []
+    if alumni_id not in members:
+        raise ValueError("Not a member of the board")
+    members = [mid for mid in members if mid != alumni_id]
+    board.memberIDs = members
+    db.session.commit()
+
+
+def listBoardsForUser(alumni_id: str) -> list:
+    boards = CommunityBoard.query.all()
+    results = []
+    for board in boards:
+        member_ids = board.memberIDs or []
+        if board.alumniID not in member_ids:
+            member_ids.append(board.alumniID)
+        results.append({
+            "board": board,
+            "members": len(member_ids),
+            "isMember": alumni_id in member_ids,
+            "adminName": board.owner.name if board.owner else None
+        })
+    return results
+
+def getBoardDetails(board_id: str, alumni_id: str = None) -> dict:
+    board = db.session.get(CommunityBoard, board_id)
+    if not board:
+        raise ValueError("Board not found")
+    
+    posts = BoardPost.query.filter_by(boardID=board_id).order_by(BoardPost.postedDate.desc()).limit(50).all()
+    jobs = Job.query.filter_by(boardID=board_id).order_by(Job.postedDate.desc()).limit(50).all()
+    events = Event.query.filter_by(boardID=board_id).order_by(Event.date.asc(), Event.time.asc()).limit(50).all()
+    
+    return {
+        "board": board,
+        "posts": posts,
+        "jobs": jobs,
+        "events": events,
+    }
+
+
+def createPostInBoard(board_id: str, alumni_id: str, content: str) -> str:
+    board = _getBoard(board_id)
+    _requireBoardMember(board, alumni_id)
+    if not content.strip():
+        raise ValueError("content is required")
+    post = BoardPost(
+        boardID=board_id,
+        alumniID=alumni_id,
+        content=content.strip(),
+        likesCount=0,
+        likedBy=[],
+        comments=[]
     )
-    jobs = Job.query.filter_by(boardID=board_id).order_by(Job.postedDate.desc()).limit(20).all()
-    return render_template("community_board.html", board=board, posts=posts, jobs=jobs)
-
-
-def createPost(board_id):
-    board = db.session.get(CommunityBoard, board_id)
-    if not board:
-        return jsonify({"error": "Board not found"}), 404
-
-    data = _payload()
-    content = (data.get("content") or "").strip()
-    if not content:
-        return jsonify({"error": "content is required"}), 400
-
-    post = BoardPost(boardID=board_id, authorID=g.current_user.userID, content=content)
     db.session.add(post)
     db.session.commit()
-    return jsonify({"message": "Post created", "postID": post.postID}), 201
-
-
-def listJobs(board_id):
-    board = db.session.get(CommunityBoard, board_id)
-    if not board:
-        return jsonify({"error": "Board not found"}), 404
-    jobs = Job.query.filter_by(boardID=board_id).order_by(Job.postedDate.desc()).all()
-    return jsonify({"jobs": [_job_dict(job) for job in jobs]})
+    return post.postID
