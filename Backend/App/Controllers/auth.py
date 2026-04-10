@@ -1,80 +1,89 @@
-from datetime import datetime, timedelta, timezone
-
-import jwt
-from flask import current_app, request
-from werkzeug.security import check_password_hash
-
+from flask_jwt_extended import (
+    create_access_token,
+    decode_token,
+    get_jwt_identity,
+    verify_jwt_in_request,
+    JWTManager,
+)
 from App.Models import User
 from App.database import db
 
-JWT_ALGORITHM = "HS256"
-JWT_TTL_HOURS = 12
-
 
 def authenticate_user(email: str, password: str):
-    """Authenticate and return a user object or None."""
-    normalized_email = (email or "").strip().lower()
-    if not normalized_email or not password:
-        return None
-    user = User.query.filter_by(email=normalized_email).first()
-    if user and check_password_hash(user.password, password):
+    """
+    Verify email and password.
+    Returns User object if credentials are valid, otherwise None.
+    """
+    user = User.query.filter_by(email=email.strip().lower()).first()
+    if user and user.check_password(password):
         return user
     return None
 
 
-def issue_access_token(user, ttl_hours: int = JWT_TTL_HOURS):
-    """Create a signed JWT for the given user."""
-    now = datetime.now(timezone.utc)
-    payload = {
-        "sub": user.userID,
-        "role": user.role,
-        "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(hours=ttl_hours)).timestamp()),
-    }
-    return jwt.encode(payload, current_app.config["SECRET_KEY"], algorithm=JWT_ALGORITHM)
+def issue_access_token(user: User) -> str:
+    """
+    Generate a JWT access token for the given user.
+    """
+    return create_access_token(identity=user.userID)
 
 
 def decode_access_token(token: str):
-    """Decode and validate a JWT, returning (payload, error)."""
+    """
+    Decode a JWT token and return (payload, error).
+    Returns (payload_dict, None) on success, (None, error_message) on failure.
+    """
     try:
-        payload = jwt.decode(
-            token,
-            current_app.config["SECRET_KEY"],
-            algorithms=[JWT_ALGORITHM],
-            options={"require": ["sub", "iat", "exp"]},
-        )
+        payload = decode_token(token)
         return payload, None
-    except jwt.ExpiredSignatureError:
-        return None, "expired"
-    except jwt.InvalidTokenError:
-        return None, "invalid"
+    except Exception as e:
+        return None, str(e)
 
 
-def extract_bearer_token(req=None):
-    """Extract Bearer token from Authorization header."""
-    active_request = req or request
-    authorization = (active_request.headers.get("Authorization") or "").strip()
-    if authorization.lower().startswith("bearer "):
-        token = authorization.split(" ", 1)[1].strip()
-        if token:
-            return token
+def extract_bearer_token(request):
+    """
+    Extract JWT token from Authorization: Bearer <token> header.
+    Returns token string or None.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        return None
+    parts = auth_header.split()
+    if len(parts) == 2 and parts[0].lower() == "bearer":
+        return parts[1]
     return None
 
 
-def login(email: str, password: str):
-    """Authenticate and return (token, user) or (None, None)."""
-    user = authenticate_user(email, password)
-    if not user:
-        return None, None
-    return issue_access_token(user), user
+def setup_jwt(app):
+    """
+    Initialize JWT manager and configure user loader callbacks.
+    """
+    jwt = JWTManager(app)
+
+    @jwt.user_identity_loader
+    def user_identity_lookup(user):
+        return user
+
+    @jwt.user_lookup_loader
+    def user_lookup_callback(_jwt_header, jwt_data):
+        identity = jwt_data["sub"]
+        return db.session.get(User, identity)
+
+    return jwt
 
 
-def get_user_from_token(token: str):
-    """Resolve a user from a token, returning (user, payload, error)."""
-    payload, error = decode_access_token(token)
-    if not payload:
-        return None, None, error
-    user = db.session.get(User, payload.get("sub"))
-    if not user:
-        return None, payload, "invalid"
-    return user, payload, None
+def add_auth_context(app):
+    """
+    Add authentication context to all templates (for server‑side rendering).
+    Injects `is_authenticated` and `user` into Jinja2 context.
+    """
+    @app.context_processor
+    def inject_user():
+        try:
+            verify_jwt_in_request(optional=True)
+            user_id = get_jwt_identity()
+            user = db.session.get(User, user_id) if user_id else None
+            is_authenticated = user is not None
+        except Exception:
+            is_authenticated = False
+            user = None
+        return dict(is_authenticated=is_authenticated, user=user)
