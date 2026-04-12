@@ -1,90 +1,55 @@
-from flask import g, jsonify, render_template, request
-
-from App.Controllers.userController import role_required
-from App.Models import Alumni, Profile
 from App.database import db
+from App.Models import Profile
+from App.utils import _to_bool
 
 
-def _payload():
-    return request.get_json(silent=True) or request.form.to_dict(flat=True)
-
-
-def _to_bool(value, default=False):
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _profile_dict(profile):
-    return {
-        "profileID": profile.profileID,
-        "alumniID": profile.alumniID,
-        "bio": profile.bio,
-        "profilePicture": profile.profilePicture,
-        "contactInfo": profile.contactInfo or [],
-        "socialLinks": profile.socialLinks or [],
-        "profileVisibility": profile.profileVisibility,
-        "showCurrentJob": profile.showCurrentJob,
-        "allowMessages": profile.allowMessages,
-        "showEmail": profile.showEmail,
-    }
-
-
-def my_profile():
-    profile = Profile.query.filter_by(alumniID=g.current_user.userID).first()
+def getOrCreateProfile(alumni_id: str):
+    profile = Profile.query.filter_by(alumniID=alumni_id).first()
     if not profile:
-        profile = Profile(alumniID=g.current_user.userID)
+        profile = Profile(alumniID=alumni_id)
         db.session.add(profile)
         db.session.commit()
-    return render_template("profile.html", profile=profile, user=g.current_user)
+    return profile
 
 
-def public_profile(alumni_id):
-    profile = Profile.query.filter_by(alumniID=alumni_id).first()
-    alumni = db.session.get(Alumni, alumni_id)
-    if not profile or not alumni:
-        return jsonify({"error": "Profile not found"}), 404
-    return jsonify({"alumni": {"name": alumni.name, "email": alumni.email}, "profile": _profile_dict(profile)})
-
-
-def updateBio():
-    data = _payload()
-    profile = Profile.query.filter_by(alumniID=g.current_user.userID).first()
-    if not profile:
-        profile = Profile(alumniID=g.current_user.userID)
-        db.session.add(profile)
-
-    profile.bio = (data.get("bio") or "").strip()
-    if data.get("contactInfo") is not None:
-        profile.contactInfo = data.get("contactInfo") or []
-    if data.get("socialLinks") is not None:
-        profile.socialLinks = data.get("socialLinks") or []
-    if data.get("profileVisibility"):
-        profile.profileVisibility = data["profileVisibility"].strip().lower()
-    if data.get("showCurrentJob") is not None:
-        profile.showCurrentJob = _to_bool(data.get("showCurrentJob"), default=True)
-    if data.get("allowMessages") is not None:
-        profile.allowMessages = _to_bool(data.get("allowMessages"), default=True)
-    if data.get("showEmail") is not None:
-        profile.showEmail = _to_bool(data.get("showEmail"), default=False)
-
+def updateBio(alumni_id: str, bio: str = None, contact_info: list = None,
+              social_links: list = None, profile_visibility: str = None,
+              show_current_job: bool = None, allow_messages: bool = None,
+              show_email: bool = None):
+    profile = getOrCreateProfile(alumni_id)
+    
+    if bio is not None:
+        profile.bio = bio.strip()
+    if contact_info is not None:
+        profile.contactInfo = contact_info or []
+    if social_links is not None:
+        profile.socialLinks = social_links or []
+    if profile_visibility:
+        profile.profileVisibility = profile_visibility.strip().lower()
+    if show_current_job is not None:
+        profile.showCurrentJob = _to_bool(show_current_job, default=True)
+    if allow_messages is not None:
+        profile.allowMessages = _to_bool(allow_messages, default=True)
+    if show_email is not None:
+        profile.showEmail = _to_bool(show_email, default=False)
+    
     db.session.commit()
-    return jsonify({"message": "Profile bio updated", "profile": _profile_dict(profile)})
+    return profile
 
 
-def uploadPhoto():
-    data = _payload()
-    photo_url = (data.get("profilePicture") or "").strip()
+def updateProfilePhoto(alumni_id: str, photo_url: str):
     if not photo_url:
-        return jsonify({"error": "profilePicture URL is required"}), 400
-
-    profile = Profile.query.filter_by(alumniID=g.current_user.userID).first()
-    if not profile:
-        profile = Profile(alumniID=g.current_user.userID)
-        db.session.add(profile)
-
-    profile.profilePicture = photo_url
+        raise ValueError("profilePicture URL is required")
+    profile = getOrCreateProfile(alumni_id)
+    profile.profilePicture = photo_url.strip()
     db.session.commit()
-    return jsonify({"message": "Profile photo updated", "profile": _profile_dict(profile)})
+    return profile
+
+
+def getProfile(alumni_id: str):
+    profile = Profile.query.filter_by(alumniID=alumni_id).first()
+    if not profile:
+        profile = Profile(alumniID=alumni_id)
+        db.session.add(profile)
+        db.session.commit()
+    return profile.to_dict()
