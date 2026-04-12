@@ -1,93 +1,91 @@
-from flask import g, jsonify, render_template, request
-
-from App.Controllers.userController import login_required, role_required
-from App.Models import Message
 from App.database import db
+from App.Models import Message, User
 
 
-def _payload():
-    return request.get_json(silent=True) or request.form.to_dict(flat=True)
-
-
-def _message_dict(message):
-    return {
-        "messageID": message.messageID,
-        "senderID": message.senderID,
-        "receiverID": message.receiverID,
-        "content": message.content,
-        "timestamp": message.timestamp.isoformat(),
-        "status": message.status,
-        "attachments": message.attachments or [],
-    }
-
-
-def inbox_page():
-    inbox = (
-        Message.query.filter_by(receiverID=g.current_user.userID)
-        .order_by(Message.timestamp.desc())
-        .limit(50)
-        .all()
-    )
-    return render_template("messages.html", inbox=inbox)
-
-
-def requestMessage():
-    data = _payload()
-    receiver_id = (data.get("receiverID") or "").strip()
-    content = (data.get("content") or "I'd like to message you.").strip()
+def requestMessage(sender_id: str, receiver_id: str, content: str = None) -> str:
     if not receiver_id:
-        return jsonify({"error": "receiverID is required"}), 400
-
-    message = Message(
-        senderID=g.current_user.userID,
+        raise ValueError("receiverID is required")
+    receiver = db.session.get(User, receiver_id)
+    if receiver and sender_id in (receiver.blockedUserIDs or []):
+        raise PermissionError("You are blocked by this user")
+    msg = Message(
+        senderID=sender_id,
         receiverID=receiver_id,
-        content=content,
+        content=content or "I'd like to message you.",
         status="requested",
-        attachments=data.get("attachments") or [],
+        attachments=[]
     )
-    db.session.add(message)
+    db.session.add(msg)
     db.session.commit()
-    return jsonify({"message": "Message request sent", "messageID": message.messageID}), 201
+    return msg.messageID
 
 
-def acceptRequest(message_id):
-    message = db.session.get(Message, message_id)
-    if not message:
-        return jsonify({"error": "Message not found"}), 404
-    if message.receiverID != g.current_user.userID:
-        return jsonify({"error": "Only receiver can accept this request"}), 403
-
-    message.status = "accepted"
+def acceptMessageRequest(message_id: str, receiver_id: str) -> None:
+    msg = db.session.get(Message, message_id)
+    if not msg:
+        raise ValueError("Message not found")
+    if msg.receiverID != receiver_id:
+        raise PermissionError("Only receiver can accept this request")
+    msg.status = "accepted"
     db.session.commit()
-    return jsonify({"message": "Message request accepted", "messageID": message.messageID})
 
 
-def rejectMessage(message_id):
-    message = db.session.get(Message, message_id)
-    if not message:
-        return jsonify({"error": "Message not found"}), 404
-    if message.receiverID != g.current_user.userID:
-        return jsonify({"error": "Only receiver can reject this request"}), 403
-
-    message.status = "rejected"
+def rejectMessageRequest(message_id: str, receiver_id: str) -> None:
+    msg = db.session.get(Message, message_id)
+    if not msg:
+        raise ValueError("Message not found")
+    if msg.receiverID != receiver_id:
+        raise PermissionError("Only receiver can reject this request")
+    msg.status = "rejected"
     db.session.commit()
-    return jsonify({"message": "Message request rejected", "messageID": message.messageID})
 
 
-def sendMessage():
-    data = _payload()
-    receiver_id = (data.get("receiverID") or "").strip()
-    content = (data.get("content") or "").strip()
+def sendMessage(sender_id: str, receiver_id: str, content: str) -> str:
     if not receiver_id or not content:
-        return jsonify({"error": "receiverID and content are required"}), 400
-
-    message = Message(
-        senderID=g.current_user.userID,
+        raise ValueError("receiverID and content are required")
+    receiver = db.session.get(User, receiver_id)
+    if receiver and sender_id in (receiver.blockedUserIDs or []):
+        raise PermissionError("You are blocked by this user")
+    sender = db.session.get(User, sender_id)
+    if sender and receiver_id in (sender.blockedUserIDs or []):
+        raise PermissionError("You blocked this user")
+    msg = Message(
+        senderID=sender_id,
         receiverID=receiver_id,
-        content=content,
+        content=content.strip(),
         status="sent",
-        attachments=data.get("attachments") or [],
+        attachments=[]
     )
-    db.session.add(message)
+    db.session.add(msg)
     db.session.commit()
-    return jsonify({"message": "Message sent", "data": _message_dict(message)}), 201
+    return msg.messageID
+
+
+def getInbox(user_id: str) -> list:
+    return Message.query.filter_by(receiverID=user_id).order_by(Message.timestamp.desc()).limit(50).all()
+
+
+def getSent(user_id: str) -> list:
+    return Message.query.filter_by(senderID=user_id).order_by(Message.timestamp.desc()).limit(50).all()
+
+
+def getMessageRequests(user_id: str) -> list:
+    """Return pending message requests for the user."""
+    return Message.query.filter_by(receiverID=user_id, status="requested").order_by(Message.timestamp.desc()).all()
+
+
+def blockUser(user_id: str, block_user_id: str) -> list:
+    """Block another user; returns updated blocked list."""
+    if user_id == block_user_id:
+        raise ValueError("Cannot block self")
+    user = db.session.get(User, user_id)
+    if not user:
+        raise ValueError("User not found")
+    blocked = set(user.blockedUserIDs or [])
+    if block_user_id in blocked:
+        blocked.remove(block_user_id)
+    else:
+        blocked.add(block_user_id)
+    user.blockedUserIDs = list(blocked)
+    db.session.commit()
+    return user.blockedUserIDs
