@@ -1,192 +1,152 @@
-from datetime import datetime
+from flask import Blueprint, jsonify, request
+from flask_jwt_extended import jwt_required
+from App.Controllers import eventController, eventRegistrationControllers
+from App.utils import _payload
+from App.Controllers.userController import currentUser
 
-from flask import Blueprint, g, jsonify, render_template, request
-
-from .userController import login_required, role_required
-from ..Models import Event, EventRegistration, Message
-from ..database import db
 
 event_bp = Blueprint("events", __name__, url_prefix="/events")
 
 
-def _payload():
-    return request.get_json(silent=True) or request.form.to_dict(flat=True)
-
-
-def _event_dict(event):
-    return {
-        "eventID": event.eventID,
-        "title": event.title,
-        "description": event.description,
-        "date": event.date.isoformat(),
-        "time": event.time.isoformat(),
-        "time12": event.time.strftime("%I:%M %p").lstrip("0"),
-        "location": event.location,
-        "maxAttendees": event.maxAttendees,
-        "status": event.status,
-        "boardID": event.boardID,
-    }
-
-
-@event_bp.get("")
-@login_required
-def list_events_page():
-    events = Event.query.order_by(Event.date.asc(), Event.time.asc()).all()
-    return render_template("events.html", events=events)
-
-
-@event_bp.get("/list")
-@login_required
-def listEventsAPI():
-    """API endpoint for frontend to fetch events"""
+@event_bp.route("/list", methods=["GET"])
+@jwt_required()
+def listEventsApi():
+    user = currentUser()
+    if not user:
+        return jsonify({"error": "Authentication required"}), 401
     status = request.args.get("status", "active")
-    events = Event.query.filter_by(status=status).order_by(Event.date.asc(), Event.time.asc()).all()
-    return jsonify({"events": [_event_dict(event) for event in events]})
+    limit = request.args.get("limit")
+    offset = request.args.get("offset", 0)
+    if limit:
+        events = eventController.listEvents(status=status, limit=limit, offset=offset, current_user=user)
+        return jsonify({"events": events}), 200
+    events = eventController.listEvents(status)
+    return jsonify({"events": [ev.to_dict() for ev in events]}), 200
 
 
-@event_bp.get("/list/all")
-@login_required
-def listAllEventsAPI():
-    """API endpoint to get all events regardless of status"""
-    events = Event.query.order_by(Event.date.asc(), Event.time.asc()).all()
-    return jsonify({"events": [_event_dict(event) for event in events]})
+@event_bp.route("/<event_id>", methods=["GET"])
+@jwt_required()
+def getEvent(event_id):
+    user = currentUser()
+    if not user:
+        return jsonify({"error": "Authentication required"}), 401
+    event = next((record for record in eventController.listEvents(status="active", limit=500, offset=0, current_user=user) if str(record.get("eventID")) == str(event_id)), None)
+    if not event:
+        return jsonify({"error": "Event not found"}), 404
+    return jsonify(event), 200
 
 
-@event_bp.post("")
-@role_required("alumni", "admin")
+@event_bp.route("", methods=["POST"])
+@jwt_required()
 def createEvent():
+    user = currentUser()
+    if not user or user.role not in ("alumni", "admin"):
+        return jsonify({"error": "Alumni or admin access required"}), 403
     data = _payload()
     required = ["title", "date", "time", "location", "maxAttendees", "boardID"]
-    missing = [field for field in required if not data.get(field)]
+    missing = [f for f in required if not data.get(f)]
     if missing:
         return jsonify({"error": f"Missing fields: {', '.join(missing)}"}), 400
-
     try:
-        event_date = datetime.strptime(data["date"], "%Y-%m-%d").date()
-        event_time = datetime.strptime(data["time"], "%H:%M").time()
-    except ValueError:
-        return jsonify({"error": "Invalid date/time format; expected YYYY-MM-DD and HH:MM"}), 400
-
-    event = Event(
-        alumniID=g.current_user.userID,
-        boardID=data["boardID"],
-        title=data["title"].strip(),
-        description=(data.get("description") or "").strip(),
-        date=event_date,
-        time=event_time,
-        location=data["location"].strip(),
-        maxAttendees=int(data["maxAttendees"]),
-        status="active",
-    )
-    db.session.add(event)
-    db.session.commit()
-    return jsonify({"message": "Event created", "event": _event_dict(event)}), 201
-
-
-@event_bp.post("/<event_id>/register-attendee")
-@role_required("admin", "alumni")
-def registerAttendee(event_id):
-    data = _payload()
-    attendee_id = (data.get("attendeeID") or g.current_user.userID).strip()
-    if not attendee_id:
-        return jsonify({"error": "attendeeID is required"}), 400
-    if g.current_user.role != "admin" and attendee_id != g.current_user.userID:
-        return jsonify({"error": "Alumni can only register themselves"}), 403
-
-    event = db.session.get(Event, event_id)
-    if not event or event.status != "active":
-        return jsonify({"error": "Event not available"}), 404
-
-    already_registered = EventRegistration.query.filter_by(
-        eventID=event_id, attendeeID=attendee_id
-    ).first()
-    if already_registered:
-        return jsonify({"message": "Attendee already registered"}), 200
-
-    if EventRegistration.query.filter_by(eventID=event_id, status="registered").count() >= event.maxAttendees:
-        return jsonify({"error": "Event is full"}), 409
-
-    registration = EventRegistration(eventID=event_id, attendeeID=attendee_id, status="registered")
-    db.session.add(registration)
-    db.session.commit()
-    return jsonify({"message": "Attendee registered", "registrationID": registration.registrationID}), 201
-
-
-@event_bp.post("/<event_id>/unregister-attendee")
-@role_required("admin", "alumni")
-def unregisterAttendee(event_id):
-    data = _payload()
-    attendee_id = (data.get("attendeeID") or g.current_user.userID).strip()
-    if not attendee_id:
-        return jsonify({"error": "attendeeID is required"}), 400
-    if g.current_user.role != "admin" and attendee_id != g.current_user.userID:
-        return jsonify({"error": "Alumni can only cancel their own registration"}), 403
-
-    registration = EventRegistration.query.filter_by(eventID=event_id, attendeeID=attendee_id, status="registered").first()
-    if not registration:
-        return jsonify({"error": "Registration not found"}), 404
-
-    registration.status = "cancelled"
-    db.session.commit()
-    return jsonify({"message": "Registration cancelled", "registrationID": registration.registrationID})
-
-
-@event_bp.get("/registrations/me")
-@role_required("alumni", "admin")
-def myRegistrations():
-    registrations = (
-        EventRegistration.query.filter_by(attendeeID=g.current_user.userID, status="registered")
-        .order_by(EventRegistration.registrationDate.desc())
-        .all()
-    )
-    return jsonify(
-        {
-            "eventIDs": [registration.eventID for registration in registrations],
-            "registrations": [
-                {
-                    "registrationID": registration.registrationID,
-                    "eventID": registration.eventID,
-                    "status": registration.status,
-                }
-                for registration in registrations
-            ],
-        }
-    )
-
-
-@event_bp.post("/<event_id>/cancel")
-@role_required("admin", "alumni")
-def cancelEvent(event_id):
-    event = db.session.get(Event, event_id)
-    if not event:
-        return jsonify({"error": "Event not found"}), 404
-    if g.current_user.role != "admin" and event.alumniID != g.current_user.userID:
-        return jsonify({"error": "Only the event creator or admin can cancel this event"}), 403
-
-    event.status = "cancelled"
-    db.session.commit()
-    return jsonify({"message": "Event cancelled", "eventID": event.eventID})
-
-
-@event_bp.post("/<event_id>/send-reminders")
-@role_required("admin", "alumni")
-def sendReminders(event_id):
-    event = db.session.get(Event, event_id)
-    if not event:
-        return jsonify({"error": "Event not found"}), 404
-    if g.current_user.role != "admin" and event.alumniID != g.current_user.userID:
-        return jsonify({"error": "Only the event creator or admin can send reminders"}), 403
-
-    registrations = EventRegistration.query.filter_by(eventID=event_id, status="registered").all()
-    for registration in registrations:
-        reminder = Message(
-            senderID=g.current_user.userID,
-            receiverID=registration.attendeeID,
-            content=f"Reminder: {event.title} is on {event.date.isoformat()} at {event.time.strftime('%I:%M %p').lstrip('0')}.",
-            status="sent",
-            attachments=[],
+        event_id = eventController.createEvent(
+            alumni_id=user.userID,
+            board_id=data["boardID"],
+            title=data["title"],
+            description=data.get("description", ""),
+            date_str=data["date"],
+            time_str=data["time"],
+            location=data["location"],
+            max_attendees=data["maxAttendees"]
         )
-        db.session.add(reminder)
+        return jsonify({"message": "Event created", "eventID": event_id}), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
-    db.session.commit()
-    return jsonify({"message": "Reminders sent", "count": len(registrations)})
+
+@event_bp.route("/<event_id>/register-attendee", methods=["POST"])
+@jwt_required()
+def registerAttendee(event_id):
+    user = currentUser()
+    if not user or user.role not in ("alumni", "admin"):
+        return jsonify({"error": "Alumni access required"}), 403
+    try:
+        reg_id = eventRegistrationControllers.registerForEvent(event_id, user.userID)
+        return jsonify({"message": "Attendee registered", "registrationID": reg_id}), 201
+    except ValueError as e:
+        msg = str(e).lower()
+        if "not found" in msg:
+            return jsonify({"error": str(e)}), 404
+        if "already" in msg:
+            return jsonify({"error": str(e)}), 409
+        return jsonify({"error": str(e)}), 400
+
+
+@event_bp.route("/<event_id>/cancel", methods=["POST"])
+@jwt_required()
+def cancelEvent(event_id):
+    user = currentUser()
+    if not user or user.role not in ("alumni", "admin"):
+        return jsonify({"error": "Authentication required"}), 403
+    is_admin = (user.role == "admin")
+    try:
+        eventController.cancelEvent(event_id, user.userID, is_admin)
+        return jsonify({"message": "Event cancelled", "eventID": event_id}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404 if "not found" in str(e).lower() else 400
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
+
+
+@event_bp.route("/<event_id>/send-reminders", methods=["POST"])
+@jwt_required()
+def sendReminders(event_id):
+    user = currentUser()
+    if not user or user.role not in ("alumni", "admin"):
+        return jsonify({"error": "Authentication required"}), 403
+    try:
+        count = eventController.sendReminders(event_id, user.userID)
+        return jsonify({"message": "Reminders sent", "count": count}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404 if "not found" in str(e).lower() else 400
+
+
+@event_bp.route("/registrations/me", methods=["GET"])
+@jwt_required()
+def getRegisteredEvents():
+    user = currentUser()
+    if not user or user.role != "alumni":
+        return jsonify({"error": "Alumni access required"}), 403
+    event_ids = eventController.listRegisteredEvents(user.userID)
+    return jsonify({"eventIDs": event_ids}), 200
+
+
+@event_bp.route("/<event_id>/register", methods=["POST"])
+@jwt_required()
+def registerEvent(event_id):
+    user = currentUser()
+    if not user or user.role != "alumni":
+        return jsonify({"error": "Alumni access required"}), 403
+    try:
+        result = eventController.registerEvent(event_id, user.userID)
+        return jsonify(result), 201
+    except ValueError as e:
+        msg = str(e).lower()
+        if "not found" in msg:
+            return jsonify({"error": str(e)}), 404
+        return jsonify({"error": str(e)}), 400
+
+
+@event_bp.route("/<event_id>/unregister", methods=["POST"])
+@jwt_required()
+def unregisterEvent(event_id):
+    user = currentUser()
+    if not user or user.role != "alumni":
+        return jsonify({"error": "Alumni access required"}), 403
+    try:
+        result = eventController.unregisterEvent(event_id, user.userID)
+        return jsonify(result), 200
+    except ValueError as e:
+        msg = str(e).lower()
+        if "not found" in msg:
+            return jsonify({"error": str(e)}), 404
+        return jsonify({"error": str(e)}), 400

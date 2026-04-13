@@ -1,33 +1,61 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
-import { Users, Briefcase, Calendar, MessageSquare, Check, X, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
+import { Users, Briefcase, Calendar, MessageSquare, Check, X, RefreshCw, CheckCircle, XCircle, LogOut, Grid, List } from 'lucide-react';
 import { useToast } from '../components/Toast';
+import { useNavigate } from 'react-router-dom';
 
 export default function Admin() {
-  const { user } = useAuth();
-  const { stats: globalStats, jobs, approveJob, rejectJob } = useData();
+  const { user, logout } = useAuth();
+  const { stats: globalStats, jobs, events, messageRequests, approveJob, rejectJob } = useData();
   const { showToast } = useToast();
+  const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(true);
+
+  // View Mode
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const isDesktopMode = localStorage.getItem('desktopMode') === 'true';
+
+  // Force list view on mobile
+  useEffect(() => {
+    if (!isDesktopMode && viewMode === 'grid') {
+      setViewMode('list');
+    }
+  }, [isDesktopMode]);
+
+  // Simulate loading
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleLogout = () => {
+    showToast('Logged out successfully.', 'info');
+    logout();
+    navigate('/welcome');
+  };
 
   const stats = [
-    { label: 'Users', count: globalStats.alumniCount, pending: 5, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', link: '/directory' },
-    { label: 'Jobs', count: globalStats.appliedJobsCount, open: 12, icon: Briefcase, color: 'text-purple-600', bg: 'bg-purple-50', link: '/jobs' },
-    { label: 'Events', count: globalStats.registeredEventsCount, active: 3, icon: Calendar, color: 'text-orange-600', bg: 'bg-orange-50', link: '/events' },
-    { label: 'Messages', count: globalStats.unreadCount, requested: 14, icon: MessageSquare, color: 'text-emerald-600', bg: 'bg-emerald-50', link: '/messages' },
+    { label: 'Users', count: globalStats.alumniCount, pending: globalStats.pendingJobsCount, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', link: '/directory' },
+    { label: 'Jobs', count: jobs.length, open: jobs.filter((j) => j.status === 'approved').length, icon: Briefcase, color: 'text-purple-600', bg: 'bg-purple-50', link: '/jobs' },
+    { label: 'Events', count: events.length, active: events.filter((e) => e.registered).length, icon: Calendar, color: 'text-orange-600', bg: 'bg-orange-50', link: '/events' },
+    { label: 'Messages', count: messageRequests.length, requested: messageRequests.length, icon: MessageSquare, color: 'text-emerald-600', bg: 'bg-emerald-50', link: '/messages' },
   ];
 
   const pendingJobs = jobs.filter(j => j.status === 'pending');
 
-  const handleApproveJob = (id: number) => {
-    approveJob(id);
-    showToast('Job approved successfully.', 'success');
+  const handleApproveJob = async (id: string) => {
+    const ok = await approveJob(id);
+    if (ok) showToast('Job approved successfully.', 'success');
+    else showToast('Failed to approve job.', 'error');
   };
 
-  const handleRejectJob = (id: number) => {
-    rejectJob(id);
-    showToast('Job rejected.', 'info');
+  const handleRejectJob = async (id: string) => {
+    const ok = await rejectJob(id);
+    if (ok) showToast('Job rejected.', 'info');
+    else showToast('Failed to reject job.', 'error');
   };
 
   const handleRefresh = () => {
@@ -46,12 +74,40 @@ export default function Admin() {
             <h1 className="text-xl font-bold text-[var(--uwi-blue-800)]">Admin Control</h1>
             <p className="text-sm text-slate-600 mt-1">Manage users, content, and platform activity.</p>
           </div>
-          <button 
-            onClick={handleRefresh}
-            className="p-2 rounded-full hover:bg-slate-100 text-slate-500 transition-colors"
-          >
-            <RefreshCw size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+              {isDesktopMode && (
+                <button 
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
+                  title="Grid View"
+                >
+                  <Grid size={16} />
+                </button>
+              )}
+              <button 
+                onClick={() => setViewMode('list')}
+                className={`p-1.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
+                title="List View"
+              >
+                <List size={16} />
+              </button>
+            </div>
+            <button 
+              onClick={handleRefresh}
+              className="p-2 rounded-full hover:bg-slate-100 text-slate-500 transition-colors"
+            >
+              <RefreshCw size={18} />
+            </button>
+            <motion.button 
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleLogout}
+              className="text-xs px-3 py-1.5 bg-red-50 border border-red-100 rounded-xl hover:bg-red-100 text-red-600 transition-colors flex items-center gap-2 font-bold shadow-sm"
+            >
+              <LogOut size={14} /> Logout
+            </motion.button>
+          </div>
         </div>
       </motion.div>
 
@@ -97,9 +153,23 @@ export default function Admin() {
           )}
         </div>
         
-        <div className="space-y-3">
-          {pendingJobs.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-4">No pending job approvals.</p>
+        <div className={viewMode === 'grid' && isDesktopMode ? 'grid grid-cols-1 md:grid-cols-2 gap-3' : 'space-y-3'}>
+          {isLoading ? (
+            Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 animate-pulse">
+                <div className="space-y-2 w-1/2">
+                  <div className="h-4 bg-slate-200 rounded w-full"></div>
+                  <div className="h-3 bg-slate-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-slate-200 rounded w-1/4 mt-1"></div>
+                </div>
+                <div className="flex gap-2">
+                  <div className="w-8 h-8 rounded-full bg-slate-200"></div>
+                  <div className="w-8 h-8 rounded-full bg-slate-200"></div>
+                </div>
+              </div>
+            ))
+          ) : pendingJobs.length === 0 ? (
+            <p className="col-span-full text-sm text-slate-500 text-center py-4">No pending job approvals.</p>
           ) : (
             pendingJobs.map((job) => (
               <div key={job.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-blue-100 hover:bg-blue-50/30 transition-all">
@@ -141,7 +211,18 @@ export default function Admin() {
         </div>
         
         <div className="space-y-3">
-          {jobs.filter(j => j.status === 'approved').length === 0 ? (
+          {isLoading ? (
+            Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 animate-pulse">
+                <div className="space-y-2 w-1/2">
+                  <div className="h-4 bg-slate-200 rounded w-full"></div>
+                  <div className="h-3 bg-slate-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-slate-200 rounded w-1/4 mt-1"></div>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-slate-200"></div>
+              </div>
+            ))
+          ) : jobs.filter(j => j.status === 'approved').length === 0 ? (
             <p className="text-sm text-slate-500 text-center py-4">No approved jobs yet.</p>
           ) : (
             jobs.filter(j => j.status === 'approved').map((job) => (
@@ -167,6 +248,18 @@ export default function Admin() {
       >
         <h2 className="font-bold text-[var(--uwi-blue-800)] mb-4">Quick Actions</h2>
         <div className="grid grid-cols-2 gap-3">
+          <Link 
+            to="/admin/applications"
+            className="p-3 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-700 text-xs font-medium transition-colors text-center border border-slate-100 block"
+          >
+            Manage Applications
+          </Link>
+          <Link 
+            to="/admin/testimonials"
+            className="p-3 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-700 text-xs font-medium transition-colors text-center border border-slate-100 block"
+          >
+            Moderate Testimonials
+          </Link>
           <Link 
             to="/admin/announcements"
             className="p-3 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-700 text-xs font-medium transition-colors text-center border border-slate-100 block"

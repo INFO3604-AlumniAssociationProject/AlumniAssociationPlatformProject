@@ -53,6 +53,8 @@ export default function Register() {
     }
   };
 
+  const isFormValid = formData.name.trim() !== '' && formData.email.trim() !== '' && formData.password.trim() !== '' && formData.faculty !== '';
+
   return (
     <div className="flex flex-col justify-center min-h-[calc(100vh-100px)]">
       <motion.div 
@@ -157,7 +159,7 @@ export default function Register() {
 
           <button 
             type="submit" 
-            disabled={loading}
+            disabled={loading || !isFormValid}
             className="btn ui-btn w-full py-3 rounded-xl font-medium mt-6 disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {loading ? 'Creating Account...' : 'Create Account'}

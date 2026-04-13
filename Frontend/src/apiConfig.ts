@@ -1,7 +1,7 @@
 const envApiUrl = (import.meta.env?.VITE_API_URL as string | undefined)?.trim();
 
 const deriveDefaultApi = (): string => {
-  if (typeof window === 'undefined') return 'http://localhost:5000';
+  if (typeof window === 'undefined') return 'http://localhost:5000/api'; // Default for SSR or non-browser environments.
 
   const { protocol, hostname, port } = window.location;
   if (!port) {

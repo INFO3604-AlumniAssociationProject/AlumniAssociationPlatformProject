@@ -45,6 +45,12 @@ function authHeader(token: string | null): HeadersInit {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
+  const clearSession = () => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    setUser(null);
+  };
+
   useEffect(() => {
     const hydrateSession = async () => {
       const token = getAuthToken();
@@ -60,9 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (!response.ok) {
-          localStorage.removeItem(TOKEN_KEY);
-          localStorage.removeItem(USER_KEY);
-          setUser(null);
+          clearSession();
           return;
         }
 
@@ -87,6 +91,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hydrateSession();
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    const interval = window.setInterval(async () => {
+      const token = getAuthToken();
+      if (!token) return;
+      const response = await fetch(`${API_BASE}/users/refresh`, {
+        method: 'POST',
+        headers: authHeader(token),
+      });
+      if (response.status === 401) {
+        clearSession();
+        return;
+      }
+      if (!response.ok) return;
+      const data = await response.json().catch(() => ({}));
+      if (data.token) {
+        localStorage.setItem(TOKEN_KEY, data.token);
+      }
+      if (data.user) {
+        const mappedUser = mapApiUser(data.user);
+        setUser(mappedUser);
+        localStorage.setItem(USER_KEY, JSON.stringify(mappedUser));
+      }
+    }, 10 * 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, [user]);
+
   const login = async (email: string, password: string, expectedRole?: UserRole) => {
     const response = await fetch(`${API_BASE}/users/login`, {
       method: 'POST',
@@ -99,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || 'Login failed');
+      throw new Error(data.error || data.message || response.statusText || 'Login failed');
     }
 
     if (!data.token) {
@@ -127,9 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Best-effort logout for network errors.
     }
 
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    setUser(null);
+    clearSession();
   };
 
   return (

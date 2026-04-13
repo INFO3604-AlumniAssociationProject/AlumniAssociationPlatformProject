@@ -1,26 +1,102 @@
-import React, { useState, useRef } from 'react';
+// File: Jobs.tsx
+
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { Briefcase, MapPin, DollarSign, Clock, Plus, X, Search, Filter, Upload, CheckCircle, Eye } from 'lucide-react';
+import { 
+  Briefcase, MapPin, DollarSign, Clock, Search, Bookmark, Bell, Menu, X, 
+  CheckCircle, Eye, Share2, ArrowLeft, Upload 
+} from 'lucide-react';
 import { useToast } from '../components/Toast';
+import { useNavigate } from 'react-router-dom';
+import PDFViewer from '../components/PDFViewer';
 
 export default function Jobs() {
   const { user } = useAuth();
-  const { jobs, addJob, submitJobApplication, approveApplication, rejectApplication, userProfile } = useData();
+  const { 
+    jobs, saveJob, submitJobApplication, approveApplication, rejectApplication, 
+    userProfile, fetchAndSetJobApplications, loading 
+  } = useData();
   const { showToast } = useToast();
-  const [filter, setFilter] = useState('All');
+  const navigate = useNavigate();
+
+  // Sidebar state
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   
-  // Application State
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'all' | 'saved' | 'applied'>('all');
+  
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState('All');
+  const [filterLocation, setFilterLocation] = useState('All');
+  const [filterCompany, setFilterCompany] = useState('All');
+  
+  // Alerts toggle
+  const [alertsEnabled, setAlertsEnabled] = useState(false);
+  
+  // Apply modal
   const [showApplyModal, setShowApplyModal] = useState<string | null>(null);
   const [application, setApplication] = useState({ coverLetter: '', resume: null as File | null });
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // View Applicants State
+  
+  // View applicants modal
   const [viewApplicantsJobId, setViewApplicantsJobId] = useState<string | null>(null);
   const [viewPdfUrl, setViewPdfUrl] = useState<string | null>(null);
+  
+  // Loading state for skeleton
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleApplyClick = (id: string) => {
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Compute counts
+  const savedJobsCount = jobs.filter(j => j.saved).length;
+  const appliedJobsCount = jobs.filter(j => j.applied).length;
+
+  // Unique filter options
+  const locations = ['All', ...Array.from(new Set(jobs.map(j => j.location).filter(Boolean)))];
+  const companies = ['All', ...Array.from(new Set(jobs.map(j => j.company).filter(Boolean)))];
+
+  // Filtered jobs based on active tab and filters
+  const filteredJobs = jobs.filter(job => {
+    if (activeTab === 'saved') return job.saved === true;
+    if (activeTab === 'applied') return job.applied === true;
+    
+    const matchesSearch = 
+      job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (job.location || '').toLowerCase().includes(searchQuery.toLowerCase());
+      
+    const matchesType = filterType === 'All' || job.type === filterType;
+    const matchesLocation = filterLocation === 'All' || job.location === filterLocation;
+    const matchesCompany = filterCompany === 'All' || job.company === filterCompany;
+    
+    const isVisible = job.status === 'approved' || user?.role === 'admin' || job.postedBy === user?.id;
+    
+    return matchesSearch && matchesType && matchesLocation && matchesCompany && isVisible;
+  });
+
+  const handleSaveJob = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    saveJob(id);
+    const job = jobs.find(j => j.id === id);
+    showToast(job?.saved ? 'Job removed from saved' : 'Job saved', 'success');
+  };
+
+  const handleShareJob = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const job = jobs.find(j => j.id === id);
+    if (!job) return;
+    const message = `Check out this job: ${job.title} at ${job.company} – ${window.location.origin}/jobs/${id}`;
+    navigate(`/messages?body=${encodeURIComponent(message)}`);
+  };
+
+  const handleApplyClick = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     setShowApplyModal(id);
   };
 
@@ -31,11 +107,9 @@ export default function Jobs() {
       return;
     }
 
-    // Convert file to Base64 for persistence
     const reader = new FileReader();
     reader.onloadend = () => {
       const resumeUrl = reader.result as string;
-
       submitJobApplication(showApplyModal, {
         jobId: showApplyModal,
         applicantId: 'current-user',
@@ -43,239 +117,358 @@ export default function Jobs() {
         resumeUrl,
         coverLetter: application.coverLetter
       });
-
       setShowApplyModal(null);
       setApplication({ coverLetter: '', resume: null });
-      showToast('Application submitted successfully!', 'success');
+      showToast('Application submitted!', 'success');
     };
     reader.readAsDataURL(application.resume);
   };
 
-  const filteredJobs = (filter === 'All' 
-    ? jobs 
-    : jobs.filter(job => job.type === filter)
-  ).filter(job => 
-    job.status === 'approved' || 
-    user?.role === 'admin' || 
-    job.postedBy === user?.id
-  );
+  const handleApproveApplication = async (jobId: string, applicantId: string) => {
+    const ok = await approveApplication(jobId, applicantId);
+    showToast(ok ? 'Application approved!' : 'Failed to approve', ok ? 'success' : 'error');
+  };
+
+  const handleRejectApplication = async (jobId: string, applicantId: string) => {
+    const ok = await rejectApplication(jobId, applicantId);
+    showToast(ok ? 'Application rejected' : 'Failed to reject', ok ? 'info' : 'error');
+  };
 
   return (
     <div className="space-y-4 pt-2">
-      <div className="flex justify-between items-center mb-2">
+      {/* Header with hamburger */}
+      <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-[var(--uwi-blue-800)]">Jobs</h1>
+        <button 
+          onClick={() => setSidebarOpen(true)} 
+          className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
+        >
+          <Menu size={20} className="text-slate-600" />
+        </button>
       </div>
 
-      <div className="flex flex-wrap gap-2 pb-2">
-        {['All', 'Full-time', 'Part-time', 'Contract', 'Remote'].map((type) => (
-          <motion.button
-            key={type}
-            onClick={() => setFilter(type)}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
-              filter === type 
-                ? 'bg-blue-600 text-white shadow-blue-200' 
-                : 'bg-white text-slate-600 border border-slate-100 hover:bg-slate-50 hover:shadow-md'
-            }`}
-          >
-            {type}
-          </motion.button>
-        ))}
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+        <input
+          type="text"
+          placeholder="Search jobs..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-10 pr-4 py-3 bg-white rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-100"
+        />
       </div>
 
+      {/* Horizontal Filter Row */}
+      <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+        <select 
+          value={filterType} 
+          onChange={(e) => setFilterType(e.target.value)}
+          className="bg-slate-50 border-none rounded-xl px-3 py-2 text-xs font-medium text-slate-600 shrink-0"
+        >
+          {['All', 'Full-time', 'Part-time', 'Contract', 'Remote'].map(type => (
+            <option key={type} value={type}>{type === 'All' ? 'All Types' : type}</option>
+          ))}
+        </select>
+        <select 
+          value={filterLocation} 
+          onChange={(e) => setFilterLocation(e.target.value)}
+          className="bg-slate-50 border-none rounded-xl px-3 py-2 text-xs font-medium text-slate-600 shrink-0"
+        >
+          {locations.map(loc => (
+            <option key={loc} value={loc}>{loc === 'All' ? 'All Locations' : loc}</option>
+          ))}
+        </select>
+        <select 
+          value={filterCompany} 
+          onChange={(e) => setFilterCompany(e.target.value)}
+          className="bg-slate-50 border-none rounded-xl px-3 py-2 text-xs font-medium text-slate-600 shrink-0"
+        >
+          {companies.map(comp => (
+            <option key={comp} value={comp}>{comp === 'All' ? 'All Companies' : comp}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Job Cards */}
       <div className="space-y-4">
-        {filteredJobs.length === 0 ? (
-          <div className="text-center py-10 text-slate-400">No jobs found.</div>
-        ) : (
-          filteredJobs.map((job) => (
-            <motion.div 
-              key={job.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              whileHover={{ y: -4 }}
-              className="ui-card rounded-3xl p-6 hover:shadow-xl transition-all duration-300 border border-slate-100/50 group"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center text-2xl font-bold text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors shadow-sm">
-                    {job.company.charAt(0)}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-lg leading-tight group-hover:text-blue-600 transition-colors">{job.title}</h3>
-                    <p className="text-sm text-slate-500 font-medium mt-0.5">{job.company}</p>
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <span className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider border border-blue-100">
-                    {job.type}
-                  </span>
-                  {job.status === 'pending' && (
-                    <span className="px-2 py-1 rounded-lg bg-orange-100 text-orange-600 text-[10px] font-bold uppercase tracking-wider">
-                      Pending Approval
-                    </span>
-                  )}
+        {isLoading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="ui-card rounded-2xl p-4 animate-pulse">
+              <div className="flex gap-3">
+                <div className="w-12 h-12 rounded-xl bg-slate-200 shrink-0"></div>
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-slate-200 rounded w-1/2"></div>
                 </div>
               </div>
-            
-            <div className="flex flex-wrap gap-3 mt-5 mb-5">
-              <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-                <MapPin size={14} className="text-emerald-500" /> {job.location}
+              <div className="flex gap-2 mt-3">
+                <div className="h-6 bg-slate-200 rounded w-16"></div>
+                <div className="h-6 bg-slate-200 rounded w-16"></div>
               </div>
-              <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-                <DollarSign size={14} className="text-emerald-500" /> {job.salary}
-              </div>
-              <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-                <Clock size={14} className="text-orange-500" /> {job.posted}
-              </div>
-              {/* View Applicants for Admin/Poster */}
-              {(user?.role === 'admin' || job.postedBy === user?.id) && (
-                <button 
-                  onClick={() => setViewApplicantsJobId(job.id)}
-                  className="flex items-center gap-2 text-xs font-medium text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-100 hover:bg-purple-100 transition-colors"
-                >
-                  <Eye size={14} /> Applicants ({job.applicants?.length || 0})
-                </button>
-              )}
             </div>
-            
-            {job.applied ? (
-              <div className={`w-full py-3 rounded-xl text-sm font-bold border flex items-center justify-center gap-2 ${
-                job.applicationStatus === 'approved' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                job.applicationStatus === 'rejected' ? 'bg-red-50 text-red-600 border-red-100' :
-                'bg-blue-50 text-blue-600 border-blue-100'
-              }`}>
-                {job.applicationStatus === 'approved' ? <CheckCircle size={16} /> : null}
-                {job.applicationStatus === 'rejected' ? <X size={16} /> : null}
-                {job.applicationStatus === 'approved' ? 'Application Approved' : 
-                 job.applicationStatus === 'rejected' ? 'Application Rejected' : 
-                 'Applied - Pending'}
-              </div>
-            ) : (
-              user?.role !== 'admin' && (
-                <motion.button 
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => handleApplyClick(job.id)}
-                  className="w-full py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200 hover:shadow-blue-300"
+          ))
+        ) : filteredJobs.length === 0 ? (
+          <div className="text-center py-10 text-slate-400">
+            {activeTab === 'saved' ? 'No saved jobs' : activeTab === 'applied' ? 'No applied jobs' : 'No jobs found'}
+          </div>
+        ) : (
+          filteredJobs.map(job => (
+            <motion.div
+              key={job.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              onClick={() => navigate(`/jobs/${job.id}`)}
+              className="ui-card rounded-2xl p-4 hover:shadow-md transition-all cursor-pointer relative"
+            >
+              {/* Save & Share buttons */}
+              <div className="absolute top-3 right-3 flex gap-1">
+                <button 
+                  onClick={(e) => handleSaveJob(job.id, e)}
+                  className="p-1.5 rounded-full hover:bg-slate-100 transition-colors"
                 >
-                  Apply Now
-                </motion.button>
-              )
-            )}
-          </motion.div>
-        )))}
+                  <Bookmark size={16} className={job.saved ? 'fill-blue-600 text-blue-600' : 'text-slate-400'} />
+                </button>
+                <button 
+                  onClick={(e) => handleShareJob(job.id, e)}
+                  className="p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+                >
+                  <Share2 size={16} className="text-slate-500" />
+                </button>
+              </div>
+
+              <div className="flex gap-3 pr-16">
+                <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-lg shrink-0">
+                  {job.company.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-slate-800 truncate">{job.title}</h3>
+                  <p className="text-sm text-slate-500 truncate">{job.company} • {job.location}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 mt-3">
+                <span className="text-xs bg-slate-50 px-2 py-1 rounded-lg text-slate-600 flex items-center gap-1">
+                  <DollarSign size={12} /> {job.salary}
+                </span>
+                <span className="text-xs bg-slate-50 px-2 py-1 rounded-lg text-slate-600 flex items-center gap-1">
+                  <Clock size={12} /> {job.posted}
+                </span>
+                <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-lg font-medium">
+                  {job.type}
+                </span>
+                {job.status === 'pending' && (
+                  <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-lg">Pending</span>
+                )}
+                {(user?.role === 'admin' || job.postedBy === user?.id) && (
+                  <button 
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      await fetchAndSetJobApplications?.(job.id);
+                      setViewApplicantsJobId(job.id);
+                    }}
+                    className="text-xs bg-purple-50 text-purple-600 px-2 py-1 rounded-lg flex items-center gap-1"
+                  >
+                    <Eye size={12} /> Applicants ({job.applicants?.length || 0})
+                  </button>
+                )}
+              </div>
+
+              {/* Application status / Apply button */}
+              <div className="mt-3">
+                {job.applied ? (
+                  <div className={`w-full py-2 rounded-xl text-xs font-bold text-center ${
+                    job.applicationStatus === 'approved' ? 'bg-emerald-50 text-emerald-600' :
+                    job.applicationStatus === 'rejected' ? 'bg-red-50 text-red-600' :
+                    'bg-blue-50 text-blue-600'
+                  }`}>
+                    {job.applicationStatus === 'approved' ? 'Approved' : 
+                     job.applicationStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                  </div>
+                ) : (
+                  user?.role !== 'admin' && job.status === 'approved' && (
+                    <button 
+                      onClick={(e) => handleApplyClick(job.id, e)}
+                      className="w-full py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors"
+                    >
+                      Apply Now
+                    </button>
+                  )
+                )}
+              </div>
+            </motion.div>
+          ))
+        )}
       </div>
 
-      {/* Apply Job Modal */}
+      {/* Sidebar Filter Drawer - Fast animation from left edge */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+              onClick={() => setSidebarOpen(false)}
+            />
+            <motion.div
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+              className="fixed left-0 top-0 bottom-0 w-80 bg-white z-50 p-5 overflow-y-auto shadow-xl"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-lg font-bold text-slate-800">Filters</h2>
+                <button onClick={() => setSidebarOpen(false)} className="p-1">
+                  <X size={20} className="text-slate-500" />
+                </button>
+              </div>
+
+              {/* Tabs */}
+              <div className="space-y-1 mb-6">
+                <button
+                  onClick={() => { setActiveTab('all'); setSidebarOpen(false); }}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold ${activeTab === 'all' ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+                >
+                  All Jobs
+                </button>
+                <button
+                  onClick={() => { setActiveTab('saved'); setSidebarOpen(false); }}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center justify-between ${activeTab === 'saved' ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+                >
+                  Saved Jobs
+                  <span className="text-xs bg-slate-200 px-2 py-0.5 rounded-full">{savedJobsCount}</span>
+                </button>
+                <button
+                  onClick={() => { setActiveTab('applied'); setSidebarOpen(false); }}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center justify-between ${activeTab === 'applied' ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+                >
+                  Applied Jobs
+                  <span className="text-xs bg-slate-200 px-2 py-0.5 rounded-full">{appliedJobsCount}</span>
+                </button>
+              </div>
+
+              {/* Alerts Toggle */}
+              <button
+                onClick={() => {
+                  setAlertsEnabled(!alertsEnabled);
+                  showToast(alertsEnabled ? 'Job alerts disabled' : 'Job alerts enabled', 'success');
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-bold mb-6 ${alertsEnabled ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+              >
+                <span className="flex items-center gap-2"><Bell size={16} /> Job Alerts</span>
+                <span className={`text-xs ${alertsEnabled ? 'text-blue-600' : 'text-slate-400'}`}>{alertsEnabled ? 'On' : 'Off'}</span>
+              </button>
+
+              <p className="text-xs text-slate-400 text-center mt-4">Use the top bar for type/location filters</p>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Apply Modal */}
       <AnimatePresence>
         {showApplyModal && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            data-overlay="true"
           >
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
               className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl"
             >
-              <h2 className="text-xl font-bold text-slate-800 mb-4">Apply for Job</h2>
+              <h2 className="text-xl font-bold mb-4">Apply for Job</h2>
               <form onSubmit={handleSubmitApplication} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Resume (PDF/DOCX)</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Resume (PDF/DOCX)</label>
                   <div 
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all"
+                    className="w-full border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50"
                   >
                     <Upload size={24} className="text-slate-400 mb-2" />
-                    <span className="text-sm text-slate-500 font-medium">{application.resume ? application.resume.name : 'Click to upload resume'}</span>
+                    <span className="text-sm text-slate-500">{application.resume ? application.resume.name : 'Click to upload'}</span>
                   </div>
                   <input 
-                    type="file" 
-                    ref={fileInputRef} 
+                    type="file" ref={fileInputRef} 
                     onChange={(e) => setApplication({...application, resume: e.target.files?.[0] || null})} 
-                    accept=".pdf,.docx,.doc" 
-                    className="hidden" 
+                    accept=".pdf,.docx,.doc" className="hidden" 
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cover Letter</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Cover Letter</label>
                   <textarea 
                     value={application.coverLetter} 
                     onChange={(e) => setApplication({...application, coverLetter: e.target.value})} 
-                    className="w-full bg-slate-50 rounded-xl p-3 text-sm border-none focus:ring-2 focus:ring-blue-100 min-h-[100px]"
+                    className="w-full bg-slate-50 rounded-xl p-3 text-sm min-h-[100px]"
                     placeholder="Why are you a good fit?"
-                  ></textarea>
+                  />
                 </div>
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setShowApplyModal(null)} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-colors">Cancel</button>
-                  <button type="submit" className="flex-1 btn ui-btn py-3 rounded-xl font-bold">Submit Application</button>
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => setShowApplyModal(null)} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">Cancel</button>
+                  <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold">Submit</button>
                 </div>
               </form>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
       {/* View Applicants Modal */}
       <AnimatePresence>
         {viewApplicantsJobId && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            data-overlay="true"
           >
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto"
+              initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
             >
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-slate-800">Applicants</h2>
-                <button onClick={() => setViewApplicantsJobId(null)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20} /></button>
+              <div className="flex items-center gap-2 mb-4">
+                <button onClick={() => setViewApplicantsJobId(null)} className="p-2 hover:bg-slate-100 rounded-full">
+                  <ArrowLeft size={20} />
+                </button>
+                <h2 className="text-xl font-bold">Applicants</h2>
               </div>
               
               <div className="space-y-3">
                 {jobs.find(j => j.id === viewApplicantsJobId)?.applicants?.length === 0 ? (
-                  <p className="text-slate-500 text-center py-8">No applicants yet.</p>
+                  <p className="text-center py-8 text-slate-400">No applicants yet.</p>
                 ) : (
-                  jobs.find(j => j.id === viewApplicantsJobId)?.applicants?.map((app) => (
-                    <div key={app.id} className="p-4 rounded-xl border border-slate-100 hover:shadow-md transition-all">
-                      <div className="flex justify-between items-start mb-2">
+                  jobs.find(j => j.id === viewApplicantsJobId)?.applicants?.map(app => (
+                    <div key={app.id} className="p-4 rounded-xl border border-slate-100">
+                      <div className="flex justify-between items-start">
                         <div>
-                          <h3 className="font-bold text-slate-800">{app.applicantName}</h3>
-                          <p className="text-xs text-slate-400">{new Date(app.date).toLocaleDateString()}</p>
+                          <h3 className="font-bold">{app.applicantName}</h3>
+                          <p className="text-xs text-slate-400">{app.date}</p>
                         </div>
                         <div className="flex gap-2">
-                          <button 
-                            onClick={() => setViewPdfUrl(app.resumeUrl)}
-                            className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100"
-                          >
-                            <Eye size={14} /> Resume
+                          <button onClick={() => setViewPdfUrl(app.resumeUrl)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg">
+                            View Resume
                           </button>
                           {app.status === 'pending' && (
                             <>
-                              <button 
-                                onClick={() => {
-                                  approveApplication(viewApplicantsJobId, app.applicantId);
-                                  showToast('Application approved!', 'success');
-                                }}
-                                className="flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg hover:bg-emerald-100"
-                              >
-                                <CheckCircle size={14} /> Approve
+                              <button onClick={() => handleApproveApplication(viewApplicantsJobId, app.applicantId)} className="text-xs bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg">
+                                Approve
                               </button>
-                              <button 
-                                onClick={() => {
-                                  rejectApplication(viewApplicantsJobId, app.applicantId);
-                                  showToast('Application rejected.', 'info');
-                                }}
-                                className="flex items-center gap-2 text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100"
-                              >
-                                <X size={14} /> Reject
+                              <button onClick={() => handleRejectApplication(viewApplicantsJobId, app.applicantId)} className="text-xs bg-red-50 text-red-600 px-3 py-1.5 rounded-lg">
+                                Reject
                               </button>
                             </>
                           )}
-                          {app.status === 'approved' && <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">Approved</span>}
-                          {app.status === 'rejected' && <span className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-lg">Rejected</span>}
+                          {app.status !== 'pending' && (
+                            <span className={`text-xs px-3 py-1.5 rounded-lg ${app.status === 'approved' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                              {app.status}
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg mt-2">{app.coverLetter}</p>
+                      <p className="text-sm text-slate-600 mt-2 bg-slate-50 p-3 rounded-lg">{app.coverLetter}</p>
                     </div>
                   ))
                 )}
@@ -285,22 +478,9 @@ export default function Jobs() {
         )}
       </AnimatePresence>
 
-      {/* PDF Viewer Modal */}
+      {/* PDF Viewer */}
       <AnimatePresence>
-        {viewPdfUrl && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/90 z-[60] flex flex-col p-4"
-          >
-            <div className="flex justify-between items-center mb-4 text-white">
-              <h2 className="text-lg font-bold">Resume Viewer</h2>
-              <button onClick={() => setViewPdfUrl(null)} className="p-2 hover:bg-white/20 rounded-full"><X size={24} /></button>
-            </div>
-            <div className="flex-1 bg-white rounded-2xl overflow-hidden">
-              <iframe src={viewPdfUrl} className="w-full h-full" title="Resume"></iframe>
-            </div>
-          </motion.div>
-        )}
+        {viewPdfUrl && <PDFViewer pdfUrl={viewPdfUrl} onClose={() => setViewPdfUrl(null)} />}
       </AnimatePresence>
     </div>
   );

@@ -1,17 +1,32 @@
 import React, { useState } from 'react';
 import { useAuth } from '../AuthContext';
-import { useData } from '../DataContext';
-import { motion } from 'motion/react';
+import { useData, Post, Comment, Job, Event } from '../DataContext';
+import { motion, AnimatePresence } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Calendar, Briefcase, MessageSquare, Users, Search, Plus, LogOut } from 'lucide-react';
+import { Calendar, Briefcase, MessageSquare, Users, Search, Plus, LogOut, Send, ThumbsUp, MoreHorizontal, X } from 'lucide-react';
 import { useToast } from '../components/Toast';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
-  const { stats, events, jobs, alumni } = useData();
+  const { stats, events, jobs, alumni, posts, addPost, toggleLikePost, addComment } = useData();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Feed state
+  const [newPost, setNewPost] = useState('');
+  const [isPostFocused, setIsPostFocused] = useState(false);
+  const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
+  const [newComment, setNewComment] = useState('');
+  const [showLikers, setShowLikers] = useState<string | null>(null);
+  const stripEventSeconds = (timeValue: string) => timeValue.replace(/:\d{2}(?=(?:\s*[AaPp][Mm])?$)/, '');
+
+  // Simulate loading
+  React.useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 800);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleLogout = () => {
     showToast('Logged out successfully.', 'info');
@@ -34,6 +49,33 @@ export default function Dashboard() {
     }
   };
 
+  const handlePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPost.trim()) return;
+    
+    const ok = await addPost(newPost);
+    if (ok) {
+      setNewPost('');
+      setIsPostFocused(false);
+      showToast('Post shared successfully!', 'success');
+    } else {
+      showToast('Failed to share post.', 'error');
+    }
+  };
+
+  const handleComment = async (e: React.FormEvent, postId: string) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    
+    const ok = await addComment(postId, newComment);
+    if (ok) {
+      setNewComment('');
+      showToast('Comment added!', 'success');
+    } else {
+      showToast('Failed to add comment.', 'error');
+    }
+  };
+
   const dashboardStats = [
     { label: 'Alumni', count: stats.alumniCount, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', link: '/directory' },
     { label: 'Unread', count: stats.unreadCount, icon: MessageSquare, color: 'text-emerald-600', bg: 'bg-emerald-50', link: '/messages' },
@@ -45,26 +87,23 @@ export default function Dashboard() {
   const latestJobs = jobs.slice(0, 2);
 
   return (
-    <div className="space-y-6 pt-2 max-w-2xl mx-auto">
+    <div className="space-y-6 pt-2 max-w-2xl mx-auto pb-10">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="ui-card rounded-3xl p-6 relative overflow-hidden shadow-sm border border-slate-100/50 bg-white/80 backdrop-blur-xl"
       >
         <div className="flex justify-between items-start relative z-10">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">{user?.role}</p>
-            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Hello, {user?.name}</h1>
-            <p className="text-sm text-slate-500 mt-1 font-medium">{user?.email}</p>
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-blue-50 border-2 border-white shadow-sm overflow-hidden">
+              <img src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name}&background=random`} alt={user?.name} className="w-full h-full object-cover" />
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">{user?.role}</p>
+              <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Hello, {user?.name}</h1>
+              <p className="text-sm text-slate-500 mt-1 font-medium">{user?.email}</p>
+            </div>
           </div>
-          <motion.button 
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleLogout}
-            className="text-xs px-4 py-2 bg-red-50 border border-red-100 rounded-xl hover:bg-red-100 text-red-600 transition-colors flex items-center gap-2 font-bold shadow-sm"
-          >
-            <LogOut size={14} /> Logout
-          </motion.button>
         </div>
         
         <div className="mt-6 grid grid-cols-4 gap-3">
@@ -85,6 +124,232 @@ export default function Dashboard() {
           ))}
         </div>
       </motion.div>
+
+      {/* Feed Section - Merged from Feed.tsx */}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-xl font-bold text-slate-800 tracking-tight">Recent Activity</h2>
+        </div>
+
+        {/* Create Post */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="ui-card rounded-3xl p-4 shadow-sm border border-slate-100/50 bg-white"
+        >
+          <form onSubmit={handlePost}>
+            <div className="flex gap-3">
+              <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center overflow-hidden flex-shrink-0 border border-slate-100">
+                <img src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name}&background=random`} alt={user?.name} className="w-full h-full object-cover" />
+              </div>
+              <div className="flex-1">
+                <textarea 
+                  value={newPost}
+                  onChange={(e) => setNewPost(e.target.value)}
+                  onFocus={() => setIsPostFocused(true)}
+                  placeholder="Share an update, ask a question, or start a discussion..."
+                  className={`w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-100 transition-all resize-none ${isPostFocused ? 'min-h-[100px]' : 'h-[44px]'}`}
+                />
+                
+                <AnimatePresence>
+                  {isPostFocused && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="flex justify-end mt-3 overflow-hidden"
+                    >
+                      <div className="flex gap-2">
+                        <button 
+                          type="button" 
+                          onClick={() => { setIsPostFocused(false); setNewPost(''); }}
+                          className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          type="submit"
+                          disabled={!newPost.trim()}
+                          className="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
+                        >
+                          <Send size={14} /> Post
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </form>
+        </motion.div>
+
+        {/* Posts List */}
+        <div className="space-y-4">
+          {isLoading ? (
+            Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="ui-card rounded-3xl p-5 border border-slate-100/50 bg-white animate-pulse">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-slate-200"></div>
+                  <div className="space-y-2">
+                    <div className="h-4 bg-slate-200 rounded w-32"></div>
+                    <div className="h-3 bg-slate-200 rounded w-16"></div>
+                  </div>
+                </div>
+                <div className="space-y-2 mb-4">
+                  <div className="h-4 bg-slate-200 rounded w-full"></div>
+                  <div className="h-4 bg-slate-200 rounded w-5/6"></div>
+                </div>
+              </div>
+            ))
+          ) : posts.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 bg-white rounded-3xl border border-slate-100">
+              No posts yet.
+            </div>
+          ) : (
+            posts.slice(0, 5).map((post: Post) => (
+              <motion.div 
+                key={post.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="ui-card rounded-3xl p-5 shadow-sm border border-slate-100/50 bg-white"
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-50 overflow-hidden border border-slate-100">
+                      <img src={post.avatar} alt={post.author} className="w-full h-full object-cover" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-800 text-sm leading-tight">{post.author}</h4>
+                      <span className="text-[10px] text-slate-400 font-medium">{post.time}</span>
+                    </div>
+                  </div>
+                  <button className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-50 transition-colors">
+                    <MoreHorizontal size={16} />
+                  </button>
+                </div>
+                
+                <p className="text-sm text-slate-700 mb-4 whitespace-pre-line leading-relaxed">{post.content}</p>
+                
+                <div className="flex items-center gap-4 pt-3 border-t border-slate-100">
+                  <button 
+                    onClick={() => toggleLikePost(post.id)}
+                    className={`flex items-center gap-1.5 text-xs font-bold transition-colors px-3 py-1.5 rounded-lg ${post.liked ? 'text-blue-600 bg-blue-50' : 'text-slate-500 hover:bg-slate-50'}`}
+                  >
+                    <ThumbsUp size={16} className={post.liked ? 'fill-blue-600' : ''} /> 
+                    Like
+                  </button>
+                  <button
+                    onClick={() => setShowLikers(post.id)}
+                    className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    {post.likes} likes
+                  </button>
+                  <button 
+                    onClick={() => setActiveCommentPostId(activeCommentPostId === post.id ? null : post.id)}
+                    className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    <MessageSquare size={16} /> 
+                    {post.commentsCount}
+                  </button>
+                </div>
+
+                <AnimatePresence>
+                  {activeCommentPostId === post.id && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mt-4 pt-4 border-t border-slate-100 overflow-hidden"
+                    >
+                      <div className="space-y-3 mb-4">
+                        {post.comments.map((comment: Comment) => (
+                          <div key={comment.id} className="flex gap-3">
+                            <div className="w-8 h-8 rounded-full bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-200">
+                              <img src={comment.avatar} alt={comment.author} className="w-full h-full object-cover" />
+                            </div>
+                            <div className="flex-1 bg-slate-50 rounded-2xl p-3 border border-slate-100">
+                              <div className="flex justify-between items-start mb-1">
+                                <h5 className="font-bold text-slate-800 text-xs">{comment.author}</h5>
+                                <span className="text-[10px] text-slate-400">{comment.time}</span>
+                              </div>
+                              <p className="text-xs text-slate-600 leading-relaxed">{comment.content}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <form onSubmit={(e) => handleComment(e, post.id)} className="flex gap-2">
+                        <div className="flex-1 relative">
+                          <input 
+                            type="text" 
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            placeholder="Write a comment..." 
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-10 py-2 text-xs focus:ring-2 focus:ring-blue-100 transition-all"
+                          />
+                          <button 
+                            type="submit"
+                            disabled={!newComment.trim()}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed p-1 hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                            <Send size={14} />
+                          </button>
+                        </div>
+                      </form>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showLikers && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            data-overlay="true"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-slate-800 modal-title">Liked by</h2>
+                <button onClick={() => setShowLikers(null)} className="p-2 hover:bg-slate-100 rounded-full">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {(posts.find((post) => post.id === showLikers)?.likedBy || []).length === 0 ? (
+                  <p className="text-sm text-slate-500">No likes yet.</p>
+                ) : (
+                  (posts.find((post) => post.id === showLikers)?.likedBy || []).map((userId) => {
+                    const liker = alumni.find((person) => person.id === userId);
+                    return (
+                      <div key={userId} className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                          {(liker?.name || userId).charAt(0)}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-800">{liker?.name || userId}</p>
+                          <p className="text-xs text-slate-500">{liker?.role || 'Alumni'}</p>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -142,32 +407,6 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {user?.role === 'alumni' && (
-        <Link to="/boards">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            whileHover={{ scale: 1.02, y: -2 }}
-            whileTap={{ scale: 0.98 }}
-            className="ui-card rounded-3xl p-6 bg-gradient-to-br from-blue-600 to-blue-700 text-white cursor-pointer shadow-xl shadow-blue-600/20 relative overflow-hidden group"
-          >
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl group-hover:bg-white/20 transition-colors"></div>
-            <div className="flex items-center justify-between relative z-10">
-              <div>
-                <h2 className="font-bold text-white text-lg">Communities</h2>
-                <p className="text-sm text-blue-100 mt-1 font-medium">Join groups, find jobs, and network</p>
-              </div>
-              <div 
-                className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md group-hover:bg-white group-hover:text-blue-600 transition-all shadow-lg"
-              >
-                <Users size={24} className="text-white group-hover:text-blue-600 transition-colors" />
-              </div>
-            </div>
-          </motion.div>
-        </Link>
-      )}
-
       <div className="space-y-4">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
@@ -185,7 +424,20 @@ export default function Dashboard() {
             <Link to="/events" className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline px-2 py-1 rounded-lg hover:bg-blue-50 transition-all">View All</Link>
           </div>
           <div className="space-y-4">
-            {upcomingEvents.map((event) => (
+            {isLoading ? (
+              Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 -mx-3 rounded-2xl animate-pulse">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-200 shrink-0"></div>
+                  <div className="flex-1 min-w-0 space-y-2 py-1">
+                    <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                    <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                  </div>
+                </div>
+              ))
+            ) : upcomingEvents.length === 0 ? (
+              <div className="text-center py-4 text-slate-400 text-sm">No upcoming events.</div>
+            ) : (
+              upcomingEvents.map((event) => (
               <Link to="/events" key={event.id}>
                 <motion.div 
                   whileHover={{ scale: 1.02, backgroundColor: 'rgba(248, 250, 252, 1)' }}
@@ -197,31 +449,46 @@ export default function Dashboard() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors truncate">{event.title}</h3>
-                    <p className="text-xs text-slate-500 mt-1 font-medium truncate">{event.time} • {event.location}</p>
+                    <p className="text-xs text-slate-500 mt-1 font-medium truncate">{stripEventSeconds(event.time)} • {event.location}</p>
                   </div>
                 </motion.div>
               </Link>
-            ))}
-          </div>
-        </motion.div>
+            ))
+          )}
+        </div>
+      </motion.div>
 
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="ui-card rounded-3xl p-6 shadow-sm border border-slate-100/50 bg-white/80 backdrop-blur-xl"
-        >
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="font-bold text-slate-800 flex items-center gap-2">
-              <div className="p-2 bg-purple-50 rounded-xl">
-                <Briefcase size={18} className="text-purple-600" />
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25 }}
+        className="ui-card rounded-3xl p-6 shadow-sm border border-slate-100/50 bg-white/80 backdrop-blur-xl"
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="font-bold text-slate-800 flex items-center gap-2">
+            <div className="p-2 bg-purple-50 rounded-xl">
+              <Briefcase size={18} className="text-purple-600" />
+            </div>
+            Latest Jobs
+          </h2>
+          <Link to="/jobs" className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline px-2 py-1 rounded-lg hover:bg-blue-50 transition-all">View All</Link>
+        </div>
+        <div className="space-y-3">
+          {isLoading ? (
+            Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="block p-4 rounded-2xl border border-slate-100 bg-slate-50/50 mb-3 last:mb-0 animate-pulse">
+                <div className="h-4 bg-slate-200 rounded w-3/4 mb-2"></div>
+                <div className="h-3 bg-slate-200 rounded w-1/2 mb-3"></div>
+                <div className="flex items-center justify-between mt-3">
+                  <div className="h-5 bg-slate-200 rounded w-16"></div>
+                  <div className="h-3 bg-slate-200 rounded w-12"></div>
+                </div>
               </div>
-              Latest Jobs
-            </h2>
-            <Link to="/jobs" className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline px-2 py-1 rounded-lg hover:bg-blue-50 transition-all">View All</Link>
-          </div>
-          <div className="space-y-3">
-            {latestJobs.map((job) => (
+            ))
+          ) : latestJobs.length === 0 ? (
+            <div className="text-center py-4 text-slate-400 text-sm">No recent jobs.</div>
+          ) : (
+            latestJobs.map((job) => (
               <Link to="/jobs" key={job.id}>
                 <motion.div 
                   whileHover={{ scale: 1.02, y: -2 }}
@@ -235,10 +502,11 @@ export default function Dashboard() {
                   </div>
                 </motion.div>
               </Link>
-            ))}
-          </div>
-        </motion.div>
-      </div>
+            ))
+          )}
+        </div>
+      </motion.div>
     </div>
-  );
+  </div>
+);
 }

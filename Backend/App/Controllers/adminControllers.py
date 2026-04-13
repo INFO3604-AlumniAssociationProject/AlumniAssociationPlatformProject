@@ -1,140 +1,86 @@
-from flask import Blueprint, jsonify, render_template, request
-
-from App.Controllers.userController import role_required
-from App.Models import Event, Job, Message, User
 from App.database import db
+from App.Models import User, Event, Job, Message
+from App.Controllers import eventController
 
 
-def _payload():
-    return request.get_json(silent=True) or request.form.to_dict(flat=True)
-
-
-def approveUser(user_id):
+def approveUser(user_id: str) -> None:
     user = db.session.get(User, user_id)
     if not user:
-        return jsonify({"error": "User not found"}), 404
+        raise ValueError(f"User {user_id} not found")
+    if user.role != "alumni":
+        raise ValueError("Only alumni accounts require approval")
     user.isApproved = True
     db.session.commit()
-    return jsonify({"message": "User approved", "userID": user.userID})
 
 
-def moderateContent():
-    data = _payload()
-    content_type = (data.get("type") or "").strip().lower()
-    content_id = (data.get("id") or "").strip()
-    action = (data.get("action") or "").strip().lower()
-
+def moderateContent(content_type: str, content_id: str, action: str) -> None:
     model_map = {"job": Job, "event": Event, "message": Message}
     model = model_map.get(content_type)
     if not model:
-        return jsonify({"error": "type must be one of: job, event, message"}), 400
-
+        raise ValueError("type must be one of: job, event, message")
+    
     record = db.session.get(model, content_id)
     if not record:
-        return jsonify({"error": "Content not found"}), 404
-
+        raise ValueError(f"{content_type} {content_id} not found")
+    
     status_map = {"approve": "approved", "hide": "hidden", "reject": "rejected"}
     if action not in status_map:
-        return jsonify({"error": "action must be approve, hide, or reject"}), 400
-
+        raise ValueError("action must be approve, hide, or reject")
+    
     if hasattr(record, "status"):
         record.status = status_map[action]
     db.session.commit()
-    return jsonify({"message": f"{content_type} {action}d", "id": content_id})
 
 
-@role_required("admin")
-def generateReport():
-    report = {
+def generateReport() -> dict:
+    return {
         "users": {
             "total": User.query.count(),
             "pendingApproval": User.query.filter_by(role="alumni", isApproved=False).count(),
             "alumni": User.query.filter_by(role="alumni").count(),
             "admins": User.query.filter_by(role="admin").count(),
         },
-        "jobs": {
-            "total": Job.query.count(),
-            "open": Job.query.filter_by(status="open").count(),
-            "closed": Job.query.filter_by(status="closed").count(),
-        },
         "events": {
             "total": Event.query.count(),
             "active": Event.query.filter_by(status="active").count(),
             "cancelled": Event.query.filter_by(status="cancelled").count(),
         },
-        "messages": {
-            "total": Message.query.count(),
-            "requested": Message.query.filter_by(status="requested").count(),
-        },
-    }
-    return jsonify({"report": report})
-
-
-@role_required("admin")
-def manageEvent(event_id):
-    data = _payload()
-    event = db.session.get(Event, event_id)
-    if not event:
-        return jsonify({"error": "Event not found"}), 404
-
-    action = (data.get("action") or "").strip().lower()
-    if action == "cancel":
-        event.status = "cancelled"
-        result = "cancelled"
-    elif action == "reopen":
-        event.status = "active"
-        result = "reopened"
-    else:
-        return jsonify({"error": "action must be cancel or reopen"}), 400
-
-    db.session.commit()
-    return jsonify({"message": f"Event {result}", "eventID": event.eventID, "status": event.status})
-
-
-@role_required("admin")
-def sendAnnouncement():
-    from flask import g
-
-    data = _payload()
-    content = (data.get("content") or "").strip()
-    if not content:
-        return jsonify({"error": "content is required"}), 400
-
-    recipients = User.query.filter(User.role == "alumni", User.isApproved.is_(True)).all()
-    created = []
-    for recipient in recipients:
-        message = Message(
-            senderID=g.current_user.userID,
-            receiverID=recipient.userID,
-            content=content,
-            status="sent",
-            attachments=[],
-        )
-        db.session.add(message)
-        created.append(recipient.userID)
-
-    db.session.commit()
-    return jsonify({"message": "Announcement sent", "recipientCount": len(created)})
-
-
-@role_required("admin")
-def admin_panel():
-    report = {
-        "users": {
-            "total": User.query.count(),
-            "pendingApproval": User.query.filter_by(role="alumni", isApproved=False).count(),
-        },
         "jobs": {
             "total": Job.query.count(),
             "open": Job.query.filter_by(status="open").count(),
-        },
-        "events": {
-            "total": Event.query.count(),
-            "active": Event.query.filter_by(status="active").count(),
+            "closed": Job.query.filter_by(status="closed").count(),
         },
         "messages": {
             "total": Message.query.count(),
             "requested": Message.query.filter_by(status="requested").count(),
         },
     }
-    return render_template("admin.html", report=report)
+
+
+def manageEvent(event_id: str, action: str) -> None:
+    # delegate to eventController for consistent permission checks and behavior
+    if action == "cancel":
+        eventController.cancelEvent(event_id, requester_id=None, is_admin=True)
+    elif action == "reopen":
+        eventController.reopenEvent(event_id, requester_id=None, is_admin=True)
+    else:
+        raise ValueError("action must be cancel or reopen")
+
+
+def sendAnnouncement(admin_id: str, content: str) -> int:
+    if not content.strip():
+        raise ValueError("content is required")
+    recipients = User.query.filter_by(role="alumni", isApproved=True).all()
+    count = 0
+    for recipient in recipients:
+        message = Message(
+            senderID=admin_id,
+            receiverID=recipient.userID,
+            content=content.strip(),
+            status="sent",
+            attachments=[]
+        )
+        db.session.add(message)
+        count += 1
+    db.session.commit()
+    return count

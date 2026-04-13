@@ -23,3 +23,23 @@ class Event(db.Model):
 
     def __repr__(self):
         return f'<Event {self.title} on {self.date}>'
+
+    def __init__(self, *args, **kwargs):
+        # Call base constructor then ensure sensible defaults without overwriting provided values
+        super().__init__(*args, **kwargs)
+        if getattr(self, 'status', None) is None:
+            self.status = 'active'
+
+    def to_dict(self):
+        return {
+            "eventID": self.eventID,
+            "alumniID": self.alumniID,
+            "boardID": self.boardID,
+            "title": self.title,
+            "description": self.description,
+            "date": self.date.isoformat(),
+            "time": self.time.isoformat(),
+            "location": self.location,
+            "maxAttendees": self.maxAttendees,
+            "status": self.status,
+        }

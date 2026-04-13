@@ -1,527 +1,342 @@
-from datetime import date, time
-
 import click
-from werkzeug.security import generate_password_hash
+import pytest
+import sys
+from flask.cli import AppGroup
+from flask_migrate import Migrate
 
-from App.database import db
 from App.main import create_app
-from App.Models import (
-    Admin,
-    Alumni,
-    BoardPost,
-    CommunityBoard,
-    Event,
-    EventRegistration,
-    Job,
-    JobApplication,
-    Message,
-    Profile,
-)
+from App.database import db
+from App.Models import User, Alumni, Admin, Event, Job, BoardPost, CommunityBoard, Message
+from App.Controllers.initialize import initialize_database, reset_database, add_sample_data
+from App.Controllers.userController import registerUser, loginUser, updateProfile, resetPassword
+from App.Controllers.adminControllers import approveUser, moderateContent, generateReport, manageEvent, sendAnnouncement
+from App.Controllers.alumniControllers import searchAlumni
+from App.Controllers.eventRegistrationControllers import registerForEvent as register_event_ctrl
+from App.Controllers.eventController import createEvent, cancelEvent, sendReminders, listEvents, registerEvent, unregisterEvent
+from App.Controllers.jobController import createJob, updateJob, closeJob, listJobs, saveJob, showSavedJobs, addTestimonial, deleteTestimonial
+from App.Controllers.jobApplicationController import createApplication, viewApplication, listApplications, withdrawApplication, updateApplicationStatus
+from App.Controllers.boardPostController import createBoardPost, viewBoardPost, listBoardPosts, updateBoardPost, deleteBoardPost, likePost, addComment, listAllPosts
+from App.Controllers.messageController import requestMessage, acceptMessageRequest, rejectMessageRequest, sendMessage, showInbox, showSentMessages, showMessageRequests, blockUser
+from App.Controllers.profileController import ensureProfile, updateBio, updateProfilePhoto, viewProfile
+from App.Controllers.communityBoardController import createBoard, joinBoard, leaveBoard, listBoardsForUser, viewBoardDetails, createPostInBoard
 
 app = create_app()
+migrate = Migrate(app, db)
 
 
-@app.cli.command("init", help="Reset and seed the database.")
-def init_command():
-    with app.app_context():
-        initialize()
-    click.echo("database initialized")
-
-
-def initialize():
-    """Reset and seed database with richer sample records."""
-    db.drop_all()
-    db.create_all()
-
-    # Admins
-    admins = [
-        Admin(
-            email="kelvin@mail.com",
-            password=generate_password_hash("pass"),
-            name="Kelvin Richards",
-            role="admin",
-            adminLevel="super",
-            department="IT",
-            isApproved=True,
-        ),
-        Admin(
-            email="tanya@mail.com",
-            password=generate_password_hash("pass"),
-            name="Tanya Joseph",
-            role="admin",
-            adminLevel="moderator",
-            department="Communications",
-            isApproved=True,
-        ),
-        Admin(
-            email="marlon@mail.com",
-            password=generate_password_hash("pass"),
-            name="Marlon Singh",
-            role="admin",
-            adminLevel="moderator",
-            department="Alumni Relations",
-            isApproved=True,
-        ),
-    ]
-    db.session.add_all(admins)
-    db.session.flush()
-
-    # Alumni + profiles
-    alumni_data = [
-        {"name": "Aaron Baptiste", "email": "aaron@mail.com", "grad": 2020, "faculty": "Engineering", "degree": "BSc Computer Science", "job": "Software Engineer", "company": "Google"},
-        {"name": "Priya Nair", "email": "priya@mail.com", "grad": 2021, "faculty": "Science & Tech", "degree": "BSc Data Science", "job": "Data Analyst", "company": "Massy Group"},
-        {"name": "Sarah James", "email": "sarah@mail.com", "grad": 2019, "faculty": "Engineering", "degree": "BSc Computer Science", "job": "Software Engineer", "company": "Google"},
-        {"name": "Michael Lee", "email": "michael@mail.com", "grad": 2018, "faculty": "Social Sciences", "degree": "BSc Management Studies", "job": "Data Scientist", "company": "Amazon"},
-        {"name": "David Chen", "email": "david@mail.com", "grad": 2017, "faculty": "Engineering", "degree": "BSc Engineering", "job": "Frontend Developer", "company": "Netflix"},
-        {"name": "Aisha Mohammed", "email": "aisha@mail.com", "grad": 2016, "faculty": "Medical Sciences", "degree": "MBBS", "job": "Resident Doctor", "company": "POS General Hospital"},
-        {"name": "Ravi Persad", "email": "ravi@mail.com", "grad": 2015, "faculty": "Law", "degree": "LLB", "job": "Attorney-at-Law", "company": "Lex Caribbean"},
-        {"name": "Natalie George", "email": "natalie@mail.com", "grad": 2022, "faculty": "Humanities", "degree": "BA Digital Media", "job": "Product Designer", "company": "Digicel"},
-        {"name": "Omar Williams", "email": "omar@mail.com", "grad": 2014, "faculty": "Engineering", "degree": "MSc Systems Engineering", "job": "DevOps Engineer", "company": "Microsoft"},
-        {"name": "Leah Adams", "email": "leah@mail.com", "grad": 2023, "faculty": "Science & Tech", "degree": "BSc Information Technology", "job": "QA Engineer", "company": "TSTT"},
-    ]
-    alumni_data.extend(
-        [
-            {"name": "Jerome Hunt", "email": "jerome@mail.com", "grad": 2013, "faculty": "Engineering", "degree": "BSc Electrical Engineering", "job": "Cybersecurity Analyst", "company": "First Citizens"},
-            {"name": "Shanelle Roberts", "email": "shanelle@mail.com", "grad": 2012, "faculty": "Social Sciences", "degree": "BSc Economics", "job": "Financial Analyst", "company": "Republic Bank"},
-            {"name": "Kevin Stewart", "email": "kevin@mail.com", "grad": 2011, "faculty": "Humanities", "degree": "BA Communication Studies", "job": "Communications Manager", "company": "Guardian Media"},
-            {"name": "Daniela Khan", "email": "daniela@mail.com", "grad": 2024, "faculty": "Science & Tech", "degree": "BSc Information Technology", "job": "Software Tester", "company": "AMCHAM TT"},
-            {"name": "Marissa Wong", "email": "marissa@mail.com", "grad": 2010, "faculty": "Medical Sciences", "degree": "MSc Public Health", "job": "Public Health Analyst", "company": "Ministry of Health"},
-            {"name": "Tariq Ali", "email": "tariq@mail.com", "grad": 2016, "faculty": "Engineering", "degree": "BSc Mechanical Engineering", "job": "Operations Engineer", "company": "bpTT"},
-            {"name": "Fiona Peters", "email": "fiona@mail.com", "grad": 2018, "faculty": "Law", "degree": "LLB", "job": "Corporate Counsel", "company": "RBC"},
-            {"name": "Andre Lewis", "email": "andre@mail.com", "grad": 2020, "faculty": "Food & Agriculture", "degree": "BSc Agribusiness", "job": "Supply Chain Analyst", "company": "NAMDEVCO"},
-            {"name": "Chloe Seepersad", "email": "chloe@mail.com", "grad": 2021, "faculty": "Science & Tech", "degree": "BSc Software Engineering", "job": "Backend Developer", "company": "iGovTT"},
-            {"name": "Dwayne Grant", "email": "dwayne@mail.com", "grad": 2017, "faculty": "Engineering", "degree": "MSc Data Engineering", "job": "Data Engineer", "company": "Massy Technologies"},
-            {"name": "Jamila Brooks", "email": "jamila@mail.com", "grad": 2019, "faculty": "Humanities", "degree": "BA Education", "job": "Instructional Designer", "company": "UWI Open Campus"},
-            {"name": "Ethan James", "email": "ethan@mail.com", "grad": 2022, "faculty": "Engineering", "degree": "BSc Computer Engineering", "job": "Platform Engineer", "company": "Courts"},
-        ]
-    )
-
-    alumni_list = []
-    for record in alumni_data:
-        alumni = Alumni(
-            email=record["email"],
-            password=generate_password_hash("pass"),
-            name=record["name"],
-            role="alumni",
-            graduationYear=record["grad"],
-            faculty=record["faculty"],
-            degree=record["degree"],
-            currentJobTitle=record["job"],
-            company=record["company"],
-            isApproved=True,
-            isPublicProfile=True,
-        )
-        db.session.add(alumni)
-        db.session.flush()
-        alumni_list.append(alumni)
-
-        profile = Profile(
-            alumniID=alumni.alumniID,
-            bio=f"{record['job']} at {record['company']}",
-            profilePicture=f"https://ui-avatars.com/api/?name={record['name'].replace(' ', '+')}&background=random",
-            profileVisibility="public",
-        )
-        db.session.add(profile)
-
-    db.session.flush()
-
-    # Community Boards
-    boards = [
-        CommunityBoard(alumniID=alumni_list[2].alumniID, name="Tech Innovators", description="A community for software, data, and product professionals."),
-        CommunityBoard(alumniID=alumni_list[3].alumniID, name="UWI Entrepreneurs", description="Connecting alumni founders, operators, and investors."),
-        CommunityBoard(alumniID=alumni_list[5].alumniID, name="Health Sciences Alumni", description="Medical, nursing, and public health graduates."),
-        CommunityBoard(alumniID=alumni_list[7].alumniID, name="Creative Arts Collective", description="Designers, writers, and media creators network."),
-    ]
-    boards.extend(
-        [
-            CommunityBoard(alumniID=alumni_list[10].alumniID, name="Cybersecurity Guild", description="Blue-team, red-team, and security operations discussions."),
-            CommunityBoard(alumniID=alumni_list[11].alumniID, name="Finance & Analytics Circle", description="Finance professionals using analytics to drive decisions."),
-            CommunityBoard(alumniID=alumni_list[20].alumniID, name="Education Leaders Network", description="Educators and learning designers sharing best practices."),
-        ]
-    )
-    db.session.add_all(boards)
-    db.session.flush()
-
-    membership_map = {
-        0: [0, 1],
-        1: [0, 2],
-        2: [0],
-        3: [1],
-        4: [0, 4],
-        5: [2],
-        6: [1, 5],
-        7: [3],
-        8: [0, 4],
-        9: [3, 6],
-        10: [4],
-        11: [5],
-        12: [6],
-        13: [0, 1],
-        14: [2, 6],
-        15: [1],
-        16: [6],
-        17: [3],
-        18: [4],
-        19: [5],
-        20: [6],
-        21: [0, 4],
-    }
-
-    for alumni_index, board_indexes in membership_map.items():
-        prefs = dict(alumni_list[alumni_index].notificationPreferences or {})
-        prefs["joinedBoards"] = [boards[index].boardID for index in board_indexes]
-        alumni_list[alumni_index].notificationPreferences = prefs
-
-    # Jobs
-    jobs = [
-        Job(boardID=boards[0].boardID, alumniID=alumni_list[0].alumniID, title="Software Engineer", company="TSTT", description="[Full-time] Build and maintain internal web platforms.", salaryRange="$12k - $15k", location="Port of Spain", postedDate=date(2026, 2, 25), expiryDate=date(2026, 12, 31), status="open"),
-        Job(boardID=boards[0].boardID, alumniID=alumni_list[8].alumniID, title="Cloud Engineer", company="Microsoft", description="[Contract] Support Azure migration and IaC rollout.", salaryRange="$14k - $18k", location="Hybrid", postedDate=date(2026, 2, 28), expiryDate=date(2026, 10, 31), status="open"),
-        Job(boardID=boards[1].boardID, alumniID=alumni_list[3].alumniID, title="Community Manager", company="Tech Hub", description="[Remote] Drive startup founder engagement and events.", salaryRange="$8k - $10k", location="Remote", postedDate=date(2026, 3, 1), expiryDate=date(2026, 12, 31), status="open"),
-        Job(boardID=boards[1].boardID, alumniID=alumni_list[6].alumniID, title="Legal Associate", company="Lex Caribbean", description="[Part-time] Corporate and compliance legal support.", salaryRange="$9k - $12k", location="San Fernando", postedDate=date(2026, 2, 20), expiryDate=date(2026, 9, 30), status="open"),
-        Job(boardID=boards[2].boardID, alumniID=alumni_list[5].alumniID, title="Clinical Coordinator", company="POS General Hospital", description="[Full-time] Coordinate outpatient clinic logistics.", salaryRange="$11k - $13k", location="Port of Spain", postedDate=date(2026, 2, 18), expiryDate=date(2026, 8, 30), status="open"),
-        Job(boardID=boards[3].boardID, alumniID=alumni_list[7].alumniID, title="UX Designer", company="Digicel", description="[Contract] Design workflows for mobile-first customer journeys.", salaryRange="$10k - $14k", location="Hybrid", postedDate=date(2026, 3, 3), expiryDate=date(2026, 11, 15), status="open"),
-    ]
-    jobs.extend(
-        [
-            Job(boardID=boards[4].boardID, alumniID=alumni_list[10].alumniID, title="SOC Analyst", company="First Citizens", description="[Full-time] Monitor and respond to security alerts.", salaryRange="$11k - $14k", location="Port of Spain", postedDate=date(2026, 3, 4), expiryDate=date(2026, 10, 30), status="open"),
-            Job(boardID=boards[4].boardID, alumniID=alumni_list[18].alumniID, title="Application Security Engineer", company="iGovTT", description="[Remote] Run code security scans and remediation workflows.", salaryRange="$13k - $16k", location="Remote", postedDate=date(2026, 3, 5), expiryDate=date(2026, 12, 20), status="open"),
-            Job(boardID=boards[5].boardID, alumniID=alumni_list[11].alumniID, title="Business Intelligence Analyst", company="Republic Bank", description="[Contract] Build dashboards and KPI reporting pipelines.", salaryRange="$10k - $13k", location="Port of Spain", postedDate=date(2026, 3, 2), expiryDate=date(2026, 11, 30), status="open"),
-            Job(boardID=boards[5].boardID, alumniID=alumni_list[19].alumniID, title="Data Engineering Consultant", company="Massy Technologies", description="[Remote] Implement ETL and data quality controls.", salaryRange="$13k - $17k", location="Remote", postedDate=date(2026, 3, 6), expiryDate=date(2026, 12, 12), status="open"),
-            Job(boardID=boards[6].boardID, alumniID=alumni_list[20].alumniID, title="Learning Experience Designer", company="UWI Open Campus", description="[Part-time] Design engaging digital learning modules.", salaryRange="$9k - $12k", location="St. Augustine", postedDate=date(2026, 3, 4), expiryDate=date(2026, 9, 15), status="open"),
-            Job(boardID=boards[6].boardID, alumniID=alumni_list[12].alumniID, title="Communications Specialist", company="Guardian Media", description="[Part-time] Lead digital communication campaigns.", salaryRange="$8k - $11k", location="Port of Spain", postedDate=date(2026, 3, 1), expiryDate=date(2026, 9, 1), status="open"),
-            Job(boardID=boards[0].boardID, alumniID=alumni_list[21].alumniID, title="Platform Reliability Engineer", company="Courts", description="[Full-time] Improve system reliability and observability.", salaryRange="$12k - $16k", location="Hybrid", postedDate=date(2026, 3, 7), expiryDate=date(2026, 12, 25), status="open"),
-            Job(boardID=boards[1].boardID, alumniID=alumni_list[15].alumniID, title="Product Operations Associate", company="LaunchTT", description="[Remote] Coordinate product release and feedback cycles.", salaryRange="$7k - $9k", location="Remote", postedDate=date(2026, 3, 5), expiryDate=date(2026, 10, 15), status="open"),
-            Job(boardID=boards[2].boardID, alumniID=alumni_list[14].alumniID, title="Health Data Analyst", company="Ministry of Health", description="[Contract] Analyze epidemiology and service delivery data.", salaryRange="$10k - $12k", location="Port of Spain", postedDate=date(2026, 3, 6), expiryDate=date(2026, 11, 1), status="open"),
-        ]
-    )
-    db.session.add_all(jobs)
-    db.session.flush()
-
-    # Events
-    events = [
-        Event(alumniID=alumni_list[2].alumniID, boardID=boards[0].boardID, title="Tech Symposium", description="AI, cloud, and product engineering talks.", date=date(2026, 5, 10), time=time(9, 0), location="Teaching & Learning Complex", maxAttendees=120, status="active"),
-        Event(alumniID=alumni_list[0].alumniID, boardID=boards[1].boardID, title="Alumni Networking Mixer", description="Cross-discipline networking evening.", date=date(2026, 3, 15), time=time(18, 0), location="UWI Inn", maxAttendees=100, status="active"),
-        Event(alumniID=alumni_list[5].alumniID, boardID=boards[2].boardID, title="Healthcare Careers Panel", description="Clinical and research career pathways.", date=date(2026, 4, 4), time=time(16, 30), location="Faculty of Medical Sciences", maxAttendees=150, status="active"),
-        Event(alumniID=alumni_list[7].alumniID, boardID=boards[3].boardID, title="Design Crit Night", description="Portfolio reviews and peer feedback.", date=date(2026, 4, 18), time=time(17, 45), location="Humanities Building", maxAttendees=80, status="active"),
-        Event(alumniID=alumni_list[8].alumniID, boardID=boards[0].boardID, title="DevOps Bootcamp", description="Hands-on CI/CD and monitoring workshop.", date=date(2026, 6, 7), time=time(13, 15), location="Computer Lab 2", maxAttendees=60, status="active"),
-    ]
-    events.extend(
-        [
-            Event(alumniID=alumni_list[10].alumniID, boardID=boards[4].boardID, title="Blue Team Tabletop", description="Incident response simulation and playbook review.", date=date(2026, 5, 2), time=time(14, 0), location="Engineering Boardroom", maxAttendees=70, status="active"),
-            Event(alumniID=alumni_list[11].alumniID, boardID=boards[5].boardID, title="FinTech Analytics Meet", description="Fraud analytics and customer behavior insights.", date=date(2026, 5, 20), time=time(18, 30), location="FSS Seminar Room", maxAttendees=90, status="active"),
-            Event(alumniID=alumni_list[20].alumniID, boardID=boards[6].boardID, title="Digital Learning Showcase", description="Showcase modern online teaching practices.", date=date(2026, 6, 12), time=time(15, 0), location="Open Campus Theatre", maxAttendees=110, status="active"),
-            Event(alumniID=alumni_list[21].alumniID, boardID=boards[0].boardID, title="SRE Lightning Talks", description="Reliability engineering lessons and demos.", date=date(2026, 7, 8), time=time(17, 0), location="Engineering LT2", maxAttendees=75, status="active"),
-            Event(alumniID=alumni_list[13].alumniID, boardID=boards[1].boardID, title="Startup QA Essentials", description="Quality assurance basics for startup teams.", date=date(2026, 4, 28), time=time(12, 45), location="Daaga Auditorium", maxAttendees=85, status="active"),
-            Event(alumniID=alumni_list[14].alumniID, boardID=boards[2].boardID, title="Public Health Data Forum", description="Data-informed community health strategies.", date=date(2026, 6, 4), time=time(10, 30), location="Medical Sciences Annex", maxAttendees=140, status="active"),
-            Event(alumniID=alumni_list[7].alumniID, boardID=boards[3].boardID, title="Creative Portfolio Night", description="Portfolio showcases and feedback circles.", date=date(2026, 7, 20), time=time(16, 15), location="Daaga Hall", maxAttendees=95, status="active"),
-        ]
-    )
-    db.session.add_all(events)
-    db.session.flush()
-
-    # Community Discussions (Board posts)
-    posts = [
-        BoardPost(boardID=boards[0].boardID, alumniID=alumni_list[2].alumniID, content="Has anyone started the PMP certification this year?"),
-        BoardPost(boardID=boards[0].boardID, alumniID=alumni_list[4].alumniID, content="Massy is hiring Junior Data Analysts, DM for referral."),
-        BoardPost(boardID=boards[0].boardID, alumniID=alumni_list[8].alumniID, content="Sharing my Terraform templates for review. Feedback welcome."),
-        BoardPost(boardID=boards[1].boardID, alumniID=alumni_list[3].alumniID, content="What are the biggest funding gaps for early-stage founders in T&T?"),
-        BoardPost(boardID=boards[1].boardID, alumniID=alumni_list[6].alumniID, content="Hosting a legal clinic next month for startup contracts."),
-        BoardPost(boardID=boards[1].boardID, alumniID=alumni_list[0].alumniID, content="Anyone open to mentoring student founders this semester?"),
-        BoardPost(boardID=boards[2].boardID, alumniID=alumni_list[5].alumniID, content="Looking for volunteers for the blood drive at campus."),
-        BoardPost(boardID=boards[2].boardID, alumniID=alumni_list[1].alumniID, content="Data folks: interested in health informatics collaboration?"),
-        BoardPost(boardID=boards[3].boardID, alumniID=alumni_list[7].alumniID, content="Who wants to collaborate on a UWI alumni visual archive?"),
-        BoardPost(boardID=boards[3].boardID, alumniID=alumni_list[9].alumniID, content="Posting my UI case study tonight, would love critiques."),
-    ]
-    posts.extend(
-        [
-            BoardPost(boardID=boards[4].boardID, alumniID=alumni_list[10].alumniID, content="Anyone using OpenVAS for regular internal scans?"),
-            BoardPost(boardID=boards[4].boardID, alumniID=alumni_list[18].alumniID, content="Looking for review partners for API security checklists."),
-            BoardPost(boardID=boards[4].boardID, alumniID=alumni_list[21].alumniID, content="Posted a secure coding checklist in the files section."),
-            BoardPost(boardID=boards[5].boardID, alumniID=alumni_list[11].alumniID, content="Sharing a dashboard template for monthly portfolio performance."),
-            BoardPost(boardID=boards[5].boardID, alumniID=alumni_list[19].alumniID, content="What is everyone using for data lineage in finance pipelines?"),
-            BoardPost(boardID=boards[5].boardID, alumniID=alumni_list[6].alumniID, content="Quick legal reminder: update data retention clauses this quarter."),
-            BoardPost(boardID=boards[6].boardID, alumniID=alumni_list[20].alumniID, content="Who wants to co-host a webinar on student engagement tools?"),
-            BoardPost(boardID=boards[6].boardID, alumniID=alumni_list[12].alumniID, content="I can share communication templates for alumni newsletters."),
-            BoardPost(boardID=boards[6].boardID, alumniID=alumni_list[16].alumniID, content="Any recommendations for onboarding LMS platforms?"),
-            BoardPost(boardID=boards[0].boardID, alumniID=alumni_list[13].alumniID, content="Started a thread for interview prep resources."),
-            BoardPost(boardID=boards[1].boardID, alumniID=alumni_list[15].alumniID, content="Looking for mentors for first-time founders in SaaS."),
-            BoardPost(boardID=boards[2].boardID, alumniID=alumni_list[14].alumniID, content="Sharing a public health data cleaning workflow I use weekly."),
-            BoardPost(boardID=boards[3].boardID, alumniID=alumni_list[17].alumniID, content="Anyone interested in a collaborative alumni photo archive project?"),
-            BoardPost(boardID=boards[1].boardID, alumniID=alumni_list[3].alumniID, content="Pitch deck review session next Friday at 6 PM."),
-            BoardPost(boardID=boards[0].boardID, alumniID=alumni_list[0].alumniID, content="Happy to review CVs for junior dev roles this week."),
-        ]
-    )
-
-    for index, post in enumerate(posts):
-        like_members = [
-            alumni_list[(index + 1) % len(alumni_list)],
-            alumni_list[(index + 3) % len(alumni_list)],
-            alumni_list[(index + 5) % len(alumni_list)],
-        ]
-        liked_ids = [member.alumniID for member in like_members[: (index % 3) + 1]]
-        post.likedBy = liked_ids
-        post.likesCount = len(liked_ids)
-
-        first_comment_author = alumni_list[(index + 2) % len(alumni_list)]
-        second_comment_author = alumni_list[(index + 4) % len(alumni_list)]
-        comments = [
-            {
-                "commentID": f"{index}-1",
-                "authorID": first_comment_author.alumniID,
-                "authorName": first_comment_author.name,
-                "content": "Great point. Thanks for sharing this!",
-                "time": f"2026-03-{(index % 25) + 1:02d}T10:15:00",
-                "avatar": f"https://ui-avatars.com/api/?name={first_comment_author.name.replace(' ', '+')}&background=random",
-            }
-        ]
-        if index % 2 == 0:
-            comments.append(
-                {
-                    "commentID": f"{index}-2",
-                    "authorID": second_comment_author.alumniID,
-                    "authorName": second_comment_author.name,
-                    "content": "I can help with this as well. Let's connect.",
-                    "time": f"2026-03-{(index % 25) + 1:02d}T11:30:00",
-                    "avatar": f"https://ui-avatars.com/api/?name={second_comment_author.name.replace(' ', '+')}&background=random",
-                }
-            )
-        post.comments = comments
-
-    db.session.add_all(posts)
-
-    # Job Applications
-    applications = [
-        JobApplication(jobID=jobs[0].jobID, alumniID=alumni_list[1].alumniID, status="pending"),
-        JobApplication(jobID=jobs[0].jobID, alumniID=alumni_list[9].alumniID, status="pending"),
-        JobApplication(jobID=jobs[5].jobID, alumniID=alumni_list[2].alumniID, status="approved"),
-    ]
-    applications.extend(
-        [
-            JobApplication(jobID=jobs[1].jobID, alumniID=alumni_list[13].alumniID, status="pending"),
-            JobApplication(jobID=jobs[2].jobID, alumniID=alumni_list[15].alumniID, status="pending"),
-            JobApplication(jobID=jobs[6].jobID, alumniID=alumni_list[18].alumniID, status="pending"),
-            JobApplication(jobID=jobs[7].jobID, alumniID=alumni_list[21].alumniID, status="approved"),
-            JobApplication(jobID=jobs[8].jobID, alumniID=alumni_list[11].alumniID, status="pending"),
-            JobApplication(jobID=jobs[9].jobID, alumniID=alumni_list[10].alumniID, status="pending"),
-            JobApplication(jobID=jobs[10].jobID, alumniID=alumni_list[20].alumniID, status="approved"),
-            JobApplication(jobID=jobs[11].jobID, alumniID=alumni_list[12].alumniID, status="rejected"),
-        ]
-    )
-    db.session.add_all(applications)
-
-    # Event Registrations
-    registrations = [
-        EventRegistration(eventID=events[0].eventID, attendeeID=alumni_list[0].alumniID, status="registered", paymentStatus="paid"),
-        EventRegistration(eventID=events[0].eventID, attendeeID=alumni_list[1].alumniID, status="registered", paymentStatus="pending"),
-        EventRegistration(eventID=events[1].eventID, attendeeID=alumni_list[2].alumniID, status="registered", paymentStatus="pending"),
-        EventRegistration(eventID=events[2].eventID, attendeeID=alumni_list[4].alumniID, status="registered", paymentStatus="paid"),
-    ]
-    registrations.extend(
-        [
-            EventRegistration(eventID=events[3].eventID, attendeeID=alumni_list[7].alumniID, status="registered", paymentStatus="paid"),
-            EventRegistration(eventID=events[4].eventID, attendeeID=alumni_list[8].alumniID, status="registered", paymentStatus="paid"),
-            EventRegistration(eventID=events[5].eventID, attendeeID=alumni_list[18].alumniID, status="registered", paymentStatus="pending"),
-            EventRegistration(eventID=events[6].eventID, attendeeID=alumni_list[11].alumniID, status="registered", paymentStatus="paid"),
-            EventRegistration(eventID=events[7].eventID, attendeeID=alumni_list[20].alumniID, status="registered", paymentStatus="pending"),
-            EventRegistration(eventID=events[8].eventID, attendeeID=alumni_list[0].alumniID, status="registered", paymentStatus="paid"),
-            EventRegistration(eventID=events[9].eventID, attendeeID=alumni_list[13].alumniID, status="registered", paymentStatus="pending"),
-            EventRegistration(eventID=events[10].eventID, attendeeID=alumni_list[14].alumniID, status="registered", paymentStatus="paid"),
-        ]
-    )
-    db.session.add_all(registrations)
-
-    # Messages
-    messages = [
-        Message(senderID=alumni_list[1].alumniID, receiverID=alumni_list[0].alumniID, content="Hi Aaron, saw your cloud post. Can we connect?", status="requested"),
-        Message(senderID=alumni_list[0].alumniID, receiverID=alumni_list[1].alumniID, content="Sure Priya, happy to connect.", status="accepted"),
-        Message(senderID=alumni_list[7].alumniID, receiverID=alumni_list[9].alumniID, content="Leah, can you review my design portfolio draft?", status="sent"),
-        Message(senderID=alumni_list[5].alumniID, receiverID=alumni_list[2].alumniID, content="Sarah, are you joining the healthcare panel?", status="sent"),
-        Message(senderID=admins[0].adminID, receiverID=alumni_list[0].alumniID, content="Reminder: update your alumni profile before Friday.", status="sent"),
-        Message(senderID=admins[1].adminID, receiverID=alumni_list[3].alumniID, content="Your community event was approved.", status="sent"),
-    ]
-    messages.extend(
-        [
-            Message(senderID=alumni_list[10].alumniID, receiverID=alumni_list[18].alumniID, content="Can you share your API security checklist?", status="requested"),
-            Message(senderID=alumni_list[18].alumniID, receiverID=alumni_list[10].alumniID, content="Sure, sending you my latest version tonight.", status="accepted"),
-            Message(senderID=alumni_list[11].alumniID, receiverID=alumni_list[19].alumniID, content="Need help with a dashboard KPI definition.", status="sent"),
-            Message(senderID=alumni_list[20].alumniID, receiverID=alumni_list[12].alumniID, content="Can you review this community announcement draft?", status="sent"),
-            Message(senderID=alumni_list[13].alumniID, receiverID=alumni_list[0].alumniID, content="Would love feedback on my QA portfolio.", status="requested"),
-            Message(senderID=alumni_list[0].alumniID, receiverID=alumni_list[13].alumniID, content="Absolutely, send me the link.", status="accepted"),
-            Message(senderID=admins[2].adminID, receiverID=alumni_list[5].alumniID, content="Please confirm panel availability for April 4.", status="sent"),
-            Message(senderID=admins[0].adminID, receiverID=alumni_list[11].alumniID, content="Your board moderation rights were updated.", status="sent"),
-            Message(senderID=alumni_list[14].alumniID, receiverID=alumni_list[2].alumniID, content="Sharing a public health data workshop invite.", status="sent"),
-            Message(senderID=alumni_list[21].alumniID, receiverID=alumni_list[8].alumniID, content="Can we discuss platform reliability metrics?", status="requested"),
-            Message(senderID=alumni_list[8].alumniID, receiverID=alumni_list[21].alumniID, content="Yes, let's schedule a quick call.", status="accepted"),
-            Message(senderID=alumni_list[17].alumniID, receiverID=alumni_list[7].alumniID, content="Want to collaborate on the creative archive project?", status="sent"),
-        ]
-    )
-    db.session.add_all(messages)
-
-    db.session.commit()
-    print("database initialized")
-
-
-@app.cli.command("init")
+# ---------------------------
+# Core database commands
+# ---------------------------
+@app.cli.command("init", help="Creates and initializes the database with sample data")
 def init():
-    initialize()
+    initialize_database(app, create_default_admin=True)
+    add_sample_data(app)
+    print("Database initialized and sample data added.")
+
+@app.cli.command("reset", help="Drop all tables, recreate, and add sample data")
+def reset():
+    reset_database(app)
+    add_sample_data(app)
+    print("Database reset and sample data added.")
+
+@app.cli.command("seed", help="Add sample data to existing database (idempotent)")
+def seed():
+    add_sample_data(app)
+    print("Sample data added.")
+
+@app.cli.command("run", help="Run the Flask development server")
+def run_server():
+    app.run(debug=True, host="0.0.0.0", port=5000)
 
 
-@app.cli.command("seed-summary", help="Show current counts for key tables.")
-def seed_summary_command():
-    click.echo(f"Admins: {Admin.query.count()}")
-    click.echo(f"Alumni: {Alumni.query.count()}")
-    click.echo(f"Profiles: {Profile.query.count()}")
-    click.echo(f"Boards: {CommunityBoard.query.count()}")
-    click.echo(f"Board Posts: {BoardPost.query.count()}")
-    click.echo(f"Jobs: {Job.query.count()}")
-    click.echo(f"Job Applications: {JobApplication.query.count()}")
-    click.echo(f"Events: {Event.query.count()}")
-    click.echo(f"Event Registrations: {EventRegistration.query.count()}")
-    click.echo(f"Messages: {Message.query.count()}")
+# ---------------------------
+# Generic listing commands
+# ---------------------------
+@app.cli.command("listAlumni", help="Lists all alumni")
+def list_alumni():
+    alumni = Alumni.query.all()
+    for a in alumni:
+        print(f"{a.name} ({a.email}) - {a.faculty} {a.graduationYear}")
+
+@app.cli.command("listJobs", help="Lists all jobs")
+def list_jobs():
+    jobs = Job.query.all()
+    for j in jobs:
+        print(f"{j.title} at {j.company} - {j.status}")
+
+@app.cli.command("listEvents", help="Lists all events")
+def list_events():
+    events = Event.query.all()
+    for e in events:
+        print(f"{e.title} on {e.date} - {e.status}")
+
+@app.cli.command("listBoards", help="Lists all community boards")
+def list_boards():
+    boards = CommunityBoard.query.all()
+    for b in boards:
+        print(f"{b.name} (owner: {b.owner.name}) - members: {len(b.memberIDs)}")
+
+@app.cli.command("listPosts", help="Lists all board posts")
+def list_posts():
+    posts = BoardPost.query.all()
+    for p in posts:
+        print(f"Post {p.postID}: {p.content[:50]}...")
+
+@app.cli.command("listMessages", help="Lists all messages")
+def list_messages():
+    msgs = Message.query.all()
+    for m in msgs:
+        print(f"From {m.sender.email} to {m.receiver.email}: {m.content[:50]}...")
 
 
-@app.cli.command("alumni-apply-job", help="Create a job application from alumni email + job title query.")
-@click.argument("alumni_email", default="aaron@mail.com")
-@click.argument("job_title_query", default="Software Engineer")
-def alumni_apply_job_command(alumni_email, job_title_query):
-    alumni = Alumni.query.filter(Alumni.email.ilike(alumni_email)).first()
-    if not alumni:
-        click.echo(f"Alumni not found: {alumni_email}")
-        return
+# ---------------------------
+# Alumni interactive commands (AppGroup)
+# ---------------------------
+alumni_cli = AppGroup('alumni', help='Alumni object commands')
+app.cli.add_command(alumni_cli)
 
-    job = Job.query.filter(Job.title.ilike(f"%{job_title_query}%")).order_by(Job.postedDate.desc()).first()
-    if not job:
-        click.echo(f"Job not found for query: {job_title_query}")
-        return
+@alumni_cli.command("list", help="List all alumni")
+def list_all_alumni():
+    for a in Alumni.query.all():
+        print(f"{a.name} ({a.email}) - {a.currentJobTitle} at {a.company}")
 
-    existing = JobApplication.query.filter_by(jobID=job.jobID, alumniID=alumni.alumniID).first()
-    if existing:
-        click.echo(f"Application already exists: {existing.applicationID} ({existing.status})")
-        return
-
-    application = JobApplication(jobID=job.jobID, alumniID=alumni.alumniID, status="pending")
-    db.session.add(application)
-    db.session.commit()
-    click.echo(f"Created application {application.applicationID} for {alumni.email} on job '{job.title}'")
-
-
-@app.cli.command("alumni-register-event", help="Register an alumni user to an event using email + event title query.")
-@click.argument("alumni_email", default="aaron@mail.com")
-@click.argument("event_title_query", default="Tech")
-def alumni_register_event_command(alumni_email, event_title_query):
-    alumni = Alumni.query.filter(Alumni.email.ilike(alumni_email)).first()
-    if not alumni:
-        click.echo(f"Alumni not found: {alumni_email}")
-        return
-
-    event = Event.query.filter(Event.title.ilike(f"%{event_title_query}%")).order_by(Event.date.asc()).first()
-    if not event:
-        click.echo(f"Event not found for query: {event_title_query}")
-        return
-    if event.status != "active":
-        click.echo(f"Event is not active: {event.title} ({event.status})")
-        return
-
-    existing = EventRegistration.query.filter_by(eventID=event.eventID, attendeeID=alumni.alumniID).first()
-    if existing and existing.status == "registered":
-        click.echo(f"Already registered: {existing.registrationID}")
-        return
-
-    if EventRegistration.query.filter_by(eventID=event.eventID, status="registered").count() >= event.maxAttendees:
-        click.echo(f"Event is full: {event.title}")
-        return
-
-    if existing:
-        existing.status = "registered"
-        existing.registrationDate = date.today()
-        registration = existing
-    else:
-        registration = EventRegistration(
-            eventID=event.eventID,
-            attendeeID=alumni.alumniID,
-            status="registered",
-            paymentStatus="pending",
-        )
-        db.session.add(registration)
-
-    db.session.commit()
-    click.echo(f"Registered {alumni.email} for '{event.title}' ({registration.registrationID})")
-
-
-@app.cli.command("alumni-send-message", help="Send a message between users by email.")
-@click.argument("sender_email", default="aaron@mail.com")
-@click.argument("receiver_email", default="priya@mail.com")
-@click.argument("content", default="Hi from CLI")
-def alumni_send_message_command(sender_email, receiver_email, content):
-    sender = Alumni.query.filter(Alumni.email.ilike(sender_email)).first()
-    receiver = Alumni.query.filter(Alumni.email.ilike(receiver_email)).first()
-    if not sender:
-        click.echo(f"Sender alumni not found: {sender_email}")
-        return
-    if not receiver:
-        click.echo(f"Receiver alumni not found: {receiver_email}")
-        return
-
-    message = Message(
-        senderID=sender.alumniID,
-        receiverID=receiver.alumniID,
-        content=content,
-        status="sent",
-        attachments=[],
-    )
-    db.session.add(message)
-    db.session.commit()
-    click.echo(f"Message sent: {message.messageID}")
-
-
-@app.cli.command("create-user", help="Create a new user (alumni or admin).")
-@click.argument("email")
-@click.argument("password")
-@click.argument("name")
-@click.argument("role")
-@click.option("--graduation-year", type=int, help="Graduation year (alumni only)")
-@click.option("--faculty", help="Faculty (alumni only)")
-@click.option("--degree", help="Degree (alumni only)")
-@click.option("--job-title", help="Current job title (alumni only)")
-@click.option("--company", help="Current company (alumni only)")
-@click.option("--public-profile", type=bool, default=True, help="Is profile public (alumni only)")
-@click.option("--admin-level", help="Admin level: super or moderator (admin only)")
-@click.option("--department", help="Department (admin only)")
-def create_user_command(email, password, name, role, graduation_year, faculty, degree, job_title, company, public_profile, admin_level, department):
-    """Create a new user via CLI."""
-    from App.Controllers.userController import create_user
-    
+@alumni_cli.command("create", help="Create a new alumni")
+@click.argument("email", default="alum@example.com")
+@click.argument("password", default="pass123")
+@click.argument("name", default="New Alum")
+@click.argument("grad_year", default=2020)
+@click.argument("faculty", default="FST")
+@click.argument("degree", default="BSc CS")
+@click.argument("job_title", default="")
+@click.argument("company", default="")
+def create_alumni(email, password, name, grad_year, faculty, degree, job_title, company):
     try:
-        kwargs = {}
-        if role.lower() == "alumni":
-            if not graduation_year or not faculty or not degree:
-                click.echo("Error: Alumni requires --graduation-year, --faculty, and --degree")
-                return
-            kwargs = {
-                "graduationYear": graduation_year,
-                "faculty": faculty,
-                "degree": degree,
-                "currentJobTitle": job_title or "",
-                "company": company or "",
-                "isPublicProfile": public_profile,
-            }
-        elif role.lower() == "admin":
-            if not admin_level or not department:
-                click.echo("Error: Admin requires --admin-level and --department")
-                return
-            kwargs = {
-                "adminLevel": admin_level,
-                "department": department,
-            }
-        else:
-            click.echo(f"Error: Invalid role '{role}'. Must be 'alumni' or 'admin'")
-            return
-        
-        user = create_user(email, password, name, role, **kwargs)
-        click.echo(f"Created {role} user: {user.email} (ID: {user.userID})")
-    except ValueError as e:
-        click.echo(f"Error: {str(e)}")
-        return
+        result = registerUser(
+            email=email, password=password, name=name, role="alumni",
+            graduationYear=grad_year, faculty=faculty, degree=degree,
+            currentJobTitle=job_title, company=company
+        )
+        print(f"Created alumni: {result['name']} (requires approval: {result['requiresApproval']})")
     except Exception as e:
-        click.echo(f"Unexpected error: {str(e)}")
+        print(f"Error: {e}")
+
+@alumni_cli.command("search", help="Search alumni by name or faculty")
+@click.option('--name', '-n', help="Name to search")
+@click.option('--faculty', '-f', help="Faculty to filter")
+def search_alumni_cmd(name, faculty):
+    query = Alumni.query
+    if name:
+        query = query.filter(Alumni.name.ilike(f"%{name}%"))
+    if faculty:
+        query = query.filter(Alumni.faculty.ilike(f"%{faculty}%"))
+    for a in query.all():
+        print(f"{a.name} ({a.email}) - {a.faculty} {a.graduationYear}")
+
+
+@alumni_cli.command("connect", help="Send a connection message from one alumni to another")
+@click.argument("from_id")
+@click.argument("to_id")
+@click.option('--message', '-m', default='', help='Optional message content')
+def connect_cmd(from_id, to_id, message):
+    try:
+        mid = requestMessage(from_id, to_id, message or None)
+        print(f"Connection request created: {mid}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+@alumni_cli.command("register-event", help="Register an alumni for an event")
+@click.argument("alumni_id")
+@click.argument("event_id")
+def register_event_cmd(alumni_id, event_id):
+    try:
+        reg = register_event_ctrl(event_id, alumni_id)
+        print(f"Registered: {reg}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+@alumni_cli.command("apply-job", help="Apply an alumni for a job")
+@click.argument("alumni_id")
+@click.argument("job_id")
+def apply_job_cmd(alumni_id, job_id):
+    try:
+        app = createApplication(alumni_id, job_id)
+        app_id = getattr(app, 'applicationID', None) or getattr(app, 'applicationId', None) or str(app)
+        print(f"Application submitted: {app_id}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+# ---------------------------
+# Jobs interactive commands
+# ---------------------------
+jobs_cli = AppGroup('jobs', help='Job commands')
+app.cli.add_command(jobs_cli)
+
+@jobs_cli.command("list", help="List all jobs with status")
+@click.option('--status', '-s', default='open', help="Filter by status (open, closed, pending)")
+def list_jobs_status(status):
+    jobs = Job.query.filter_by(status=status).all()
+    for j in jobs:
+        print(f"{j.title} at {j.company} - {j.location} - expires {j.expiryDate}")
+
+@jobs_cli.command("create", help="Create a new job")
+@click.argument("board_id")
+@click.argument("title")
+@click.argument("company")
+@click.argument("description")
+@click.argument("expiry_date")
+@click.argument("salary_range", default="")
+@click.argument("location", default="")
+def create_job_cmd(board_id, title, company, description, expiry_date, salary_range, location):
+    alumni = Alumni.query.filter_by(isApproved=True).first()
+    if not alumni:
+        print("No approved alumni found.")
         return
+    try:
+        job_id = createJob(
+            alumni_id=alumni.alumniID, board_id=board_id, title=title, company=company,
+            description=description, expiry_date_str=expiry_date, salary_range=salary_range, location=location
+        )
+        print(f"Job created with ID: {job_id}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+# ---------------------------
+# Events interactive commands
+# ---------------------------
+events_cli = AppGroup('events', help='Event commands')
+app.cli.add_command(events_cli)
+
+@events_cli.command("list", help="List upcoming events")
+def list_upcoming_events():
+    from datetime import date
+    events = Event.query.filter(Event.date >= date.today()).order_by(Event.date.asc()).all()
+    for e in events:
+        print(f"{e.title} on {e.date} at {e.location}")
+
+@events_cli.command("create", help="Create a new event")
+@click.argument("board_id")
+@click.argument("title")
+@click.argument("description")
+@click.argument("date_str")
+@click.argument("time_str")
+@click.argument("location")
+@click.argument("max_attendees", type=int)
+def create_event_cmd(board_id, title, description, date_str, time_str, location, max_attendees):
+    alumni = Alumni.query.filter_by(isApproved=True).first()
+    if not alumni:
+        print("No approved alumni found.")
+        return
+    try:
+        event_id = createEvent(
+            alumni_id=alumni.alumniID, board_id=board_id, title=title, description=description,
+            date_str=date_str, time_str=time_str, location=location, max_attendees=max_attendees
+        )
+        print(f"Event created with ID: {event_id}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+# ---------------------------
+# Boards interactive commands
+# ---------------------------
+boards_cli = AppGroup('boards', help='Community board commands')
+app.cli.add_command(boards_cli)
+
+@boards_cli.command("list", help="List all boards with member counts")
+def list_all_boards():
+    boards = CommunityBoard.query.all()
+    for b in boards:
+        print(f"{b.name} (owner: {b.owner.name}) - members: {len(b.memberIDs)}")
+
+@boards_cli.command("create", help="Create a new board")
+@click.argument("name")
+@click.argument("description", default="")
+def create_board_cmd(name, description):
+    alumni = Alumni.query.filter_by(isApproved=True).first()
+    if not alumni:
+        print("No approved alumni found.")
+        return
+    board_id = createBoard(alumni.alumniID, name, description)
+    print(f"Board created with ID: {board_id}")
+
+
+# ---------------------------
+# Admin interactive commands
+# ---------------------------
+admin_cli = AppGroup('admin', help='Admin management commands')
+app.cli.add_command(admin_cli)
+
+@admin_cli.command("approve-user", help="Approve an alumni user")
+@click.argument("user_id")
+def approve_user_cmd(user_id):
+    try:
+        approveUser(user_id)
+        print(f"User {user_id} approved")
+    except Exception as e:
+        print(f"Error: {e}")
+
+@admin_cli.command("moderate", help="Moderate content: job|event|message <id> <action>")
+@click.argument("content_type")
+@click.argument("content_id")
+@click.argument("action")
+def moderate_cmd(content_type, content_id, action):
+    try:
+        moderateContent(content_type, content_id, action)
+        print("Moderation applied")
+    except Exception as e:
+        print(f"Error: {e}")
+
+@admin_cli.command("report", help="Generate a site report summary")
+def report_cmd():
+    try:
+        report = generateReport()
+        print(report)
+    except Exception as e:
+        print(f"Error: {e}")
+
+@admin_cli.command("manage-event", help="Manage event status: cancel|reopen <event_id>")
+@click.argument("event_id")
+@click.argument("action")
+def manage_event_cmd(event_id, action):
+    try:
+        manageEvent(event_id, action)
+        print(f"Event {event_id} action={action} applied")
+    except Exception as e:
+        print(f"Error: {e}")
+
+@admin_cli.command("announce", help="Send announcement as admin_id 'content'")
+@click.argument("admin_id")
+@click.argument("content")
+def announce_cmd(admin_id, content):
+    try:
+        count = sendAnnouncement(admin_id, content)
+        print(f"Announcement sent to {count} recipients")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+# ---------------------------
+# Test commands (optional)
+# ---------------------------
+test_cli = AppGroup('test', help='Testing commands')
+app.cli.add_command(test_cli)
+
+@test_cli.command("all", help="Run all tests")
+def run_all_tests():
+    sys.exit(pytest.main(["App/Tests"]))
+
+@test_cli.command("unit", help="Run unit tests")
+def run_unit_tests():
+    sys.exit(pytest.main(["App/Tests/UnitTests.py"]))
+
+@test_cli.command("integration", help="Run integration tests")
+def run_integration_tests():
+    sys.exit(pytest.main(["App/Tests/IntegrationTests.py"]))
+
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)

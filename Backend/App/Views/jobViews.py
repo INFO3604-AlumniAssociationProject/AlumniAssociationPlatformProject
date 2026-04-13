@@ -1,224 +1,202 @@
-from datetime import datetime
+from flask import Blueprint, jsonify, request
+from flask_jwt_extended import jwt_required
+from App.Controllers import jobController
+from App.utils import _payload
+from App.Controllers.userController import currentUser
 
-from flask import Blueprint, g, jsonify, render_template, request
-
-from .userController import login_required, role_required
-from ..Models import Job, JobApplication
-from ..database import db
 
 job_bp = Blueprint("jobs", __name__, url_prefix="/jobs")
 
 
-def _payload():
-    return request.get_json(silent=True) or request.form.to_dict(flat=True)
+@job_bp.route("/list", methods=["GET"])
+@jwt_required()
+def listJobsApi():
+    user = currentUser()
+    if not user:
+        return jsonify({"error": "Authentication required"}), 401
+    status = request.args.get("status", "open")
+    limit = request.args.get("limit")
+    offset = request.args.get("offset", 0)
+    if limit:
+        jobs = jobController.listJobs(status=status, limit=limit, offset=offset, current_user=user)
+        return jsonify({"jobs": jobs}), 200
+    jobs = jobController.listJobs(status)
+    return jsonify({"jobs": [job.to_dict() for job in jobs]}), 200
 
 
-def _job_dict(job):
-    return {
-        "jobID": job.jobID,
-        "boardID": job.boardID,
-        "alumniID": job.alumniID,
-        "posterName": job.poster.name if job.poster else None,
-        "adminID": job.adminID,
-        "title": job.title,
-        "company": job.company,
-        "description": job.description,
-        "salaryRange": job.salaryRange,
-        "location": job.location,
-        "postedDate": job.postedDate.isoformat(),
-        "expiryDate": job.expiryDate.isoformat(),
-        "status": job.status,
-    }
+@job_bp.route("/<job_id>", methods=["GET"])
+@jwt_required()
+def getJob(job_id):
+    user = currentUser()
+    if not user:
+        return jsonify({"error": "Authentication required"}), 401
+    job = next((record for record in jobController.listJobs(status="open", limit=500, offset=0, current_user=user) if str(record.get("jobID")) == str(job_id)), None)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    return jsonify(job), 200
 
 
-def _application_dict(application):
-    return {
-        "applicationID": application.applicationID,
-        "jobID": application.jobID,
-        "alumniID": application.alumniID,
-        "status": application.status,
-        "applicationDate": application.applicationDate.isoformat(),
-    }
-
-
-def _build_job(data, alumni_id, admin_id):
-    expiry_date = datetime.strptime(data["expiryDate"], "%Y-%m-%d").date()
-    return Job(
-        boardID=data["boardID"].strip(),
-        alumniID=alumni_id,
-        adminID=admin_id,
-        title=data["title"].strip(),
-        company=data["company"].strip(),
-        description=data["description"].strip(),
-        salaryRange=(data.get("salaryRange") or "").strip(),
-        location=(data.get("location") or "").strip(),
-        expiryDate=expiry_date,
-        status="open",
-    )
-
-
-@job_bp.get("")
-@login_required
-def list_jobs_page():
-    jobs = Job.query.order_by(Job.postedDate.desc()).all()
-    return render_template("jobs.html", jobs=jobs)
-
-
-@job_bp.post("")
-@role_required("alumni", "admin")
+@job_bp.route("", methods=["POST"])
+@jwt_required()
 def postJob():
+    user = currentUser()
+    if not user or user.role not in ("alumni", "admin"):
+        return jsonify({"error": "Alumni or admin access required"}), 403
     data = _payload()
     required = ["boardID", "title", "company", "description", "expiryDate"]
-    missing = [field for field in required if not data.get(field)]
+    missing = [f for f in required if not data.get(f)]
     if missing:
         return jsonify({"error": f"Missing fields: {', '.join(missing)}"}), 400
-
     try:
-        admin_id = g.current_user.userID if g.current_user.role == "admin" else None
-        job = _build_job(data=data, alumni_id=g.current_user.userID, admin_id=admin_id)
-    except ValueError:
-        return jsonify({"error": "expiryDate must be YYYY-MM-DD"}), 400
-
-    db.session.add(job)
-    db.session.commit()
-    return jsonify({"message": "Job posted", "job": _job_dict(job)}), 201
-
-
-@job_bp.get("/list")
-@login_required
-def listJobsAPI():
-    """API endpoint for frontend to fetch jobs"""
-    status = request.args.get("status", "open")
-    jobs = Job.query.filter_by(status=status).order_by(Job.postedDate.desc()).all()
-    return jsonify({"jobs": [_job_dict(job) for job in jobs]})
+        admin_id = user.userID if user.role == "admin" else None
+        job_id = jobController.createJob(
+            alumni_id=user.userID,
+            board_id=data["boardID"],
+            title=data["title"],
+            company=data["company"],
+            description=data["description"],
+            expiry_date_str=data["expiryDate"],
+            salary_range=data.get("salaryRange"),
+            location=data.get("location"),
+            admin_id=admin_id
+        )
+        return jsonify({"message": "Job posted", "jobID": job_id}), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
 
-@job_bp.get("/list/all")
-@login_required
-def listAllJobsAPI():
-    """API endpoint to get all jobs regardless of status"""
-    jobs = Job.query.order_by(Job.postedDate.desc()).all()
-    return jsonify({"jobs": [_job_dict(job) for job in jobs]})
-
-
-@job_bp.get("/applied/me")
-@role_required("alumni", "admin")
-def myApplications():
-    # Admin dashboard does not need a "my applications" list.
-    if g.current_user.role == "admin":
-        return jsonify({"jobIDs": [], "applications": []})
-
-    applications = (
-        JobApplication.query.filter_by(alumniID=g.current_user.userID)
-        .order_by(JobApplication.applicationDate.desc())
-        .all()
-    )
-    active = [app for app in applications if app.status != "withdrawn"]
-    return jsonify(
-        {
-            "jobIDs": [app.jobID for app in active],
-            "applications": [_application_dict(app) for app in active],
-        }
-    )
-
-
-@job_bp.post("/<job_id>/apply")
-@role_required("alumni")
-def apply(job_id):
-    job = db.session.get(Job, job_id)
-    if not job or job.status != "open":
-        return jsonify({"error": "Job not available"}), 404
-
-    existing = JobApplication.query.filter_by(jobID=job_id, alumniID=g.current_user.userID).first()
-    if existing:
-        if existing.status == "withdrawn":
-            existing.status = "pending"
-            existing.applicationDate = datetime.utcnow()
-            db.session.commit()
-            return jsonify({"message": "Application re-submitted", "application": _application_dict(existing)})
-        return jsonify({"message": "You have already applied", "application": _application_dict(existing)})
-
-    application = JobApplication(
-        jobID=job_id,
-        alumniID=g.current_user.userID,
-        status="pending",
-    )
-    db.session.add(application)
-    db.session.commit()
-    return jsonify({"message": "Application submitted", "application": _application_dict(application)}), 201
-
-
-@job_bp.patch("/<job_id>")
-@role_required("alumni", "admin")
+@job_bp.route("/<job_id>", methods=["PATCH"])
+@jwt_required()
 def updateJob(job_id):
+    user = currentUser()
+    if not user or user.role not in ("alumni", "admin"):
+        return jsonify({"error": "Authentication required"}), 403
     data = _payload()
-    job = db.session.get(Job, job_id)
-    if not job:
-        return jsonify({"error": "Job not found"}), 404
-
-    if g.current_user.role != "admin" and job.alumniID != g.current_user.userID:
-        return jsonify({"error": "Only the owner or admin can update this job"}), 403
-
-    editable = ["title", "company", "description", "salaryRange", "location", "status"]
-    for field in editable:
-        if data.get(field) is not None:
-            setattr(job, field, str(data[field]).strip())
-
-    if data.get("expiryDate"):
-        try:
-            job.expiryDate = datetime.strptime(data["expiryDate"], "%Y-%m-%d").date()
-        except ValueError:
-            return jsonify({"error": "expiryDate must be YYYY-MM-DD"}), 400
-
-    db.session.commit()
-    return jsonify({"message": "Job updated", "job": _job_dict(job)})
+    is_admin = (user.role == "admin")
+    try:
+        jobController.updateJob(job_id, user.userID, is_admin, **data)
+        return jsonify({"message": "Job updated", "jobID": job_id}), 200
+    except ValueError as e:
+        msg = str(e).lower()
+        if "not found" in msg:
+            return jsonify({"error": str(e)}), 404
+        return jsonify({"error": str(e)}), 400
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
 
 
-@job_bp.post("/<job_id>/close")
-@role_required("alumni", "admin")
+@job_bp.route("/<job_id>/close", methods=["POST"])
+@jwt_required()
 def closeJob(job_id):
-    job = db.session.get(Job, job_id)
-    if not job:
-        return jsonify({"error": "Job not found"}), 404
-    if g.current_user.role != "admin" and job.alumniID != g.current_user.userID:
-        return jsonify({"error": "Only the owner or admin can close this job"}), 403
-
-    job.status = "closed"
-    db.session.commit()
-    return jsonify({"message": "Job closed", "jobID": job.jobID})
-
-
-@job_bp.get("/<job_id>/applications")
-@role_required("alumni", "admin")
-def receiveApplications(job_id):
-    job = db.session.get(Job, job_id)
-    if not job:
-        return jsonify({"error": "Job not found"}), 404
-    if g.current_user.role != "admin" and job.alumniID != g.current_user.userID:
-        return jsonify({"error": "Only the owner or admin can view applications"}), 403
-
-    applications = JobApplication.query.filter_by(jobID=job_id).order_by(JobApplication.applicationDate.desc()).all()
-    payload = [
-        {
-            "applicationID": app.applicationID,
-            "alumniID": app.alumniID,
-            "applicantName": app.applicant.name if app.applicant else app.alumniID,
-            "coverLetter": "",
-            "status": app.status,
-            "appliedDate": app.applicationDate.isoformat(),
-        }
-        for app in applications
-    ]
-    return jsonify({"jobID": job_id, "applications": payload})
+    user = currentUser()
+    if not user or user.role not in ("alumni", "admin"):
+        return jsonify({"error": "Authentication required"}), 403
+    is_admin = (user.role == "admin")
+    try:
+        jobController.closeJob(job_id, user.userID, is_admin)
+        return jsonify({"message": "Job closed", "jobID": job_id}), 200
+    except ValueError as e:
+        msg = str(e).lower()
+        if "not found" in msg:
+            return jsonify({"error": str(e)}), 404
+        return jsonify({"error": str(e)}), 400
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
 
 
-@job_bp.post("/<job_id>/withdraw")
-@role_required("alumni")
-def withdraw(job_id):
-    application = JobApplication.query.filter_by(jobID=job_id, alumniID=g.current_user.userID).first()
-    if not application:
-        return jsonify({"error": "Application not found"}), 404
+@job_bp.route("/<job_id>/applications", methods=["GET"])
+@jwt_required()
+def getJobApplications(job_id):
+    user = currentUser()
+    if not user or user.role not in ("alumni", "admin"):
+        return jsonify({"error": "Authentication required"}), 403
+    is_admin = (user.role == "admin")
+    try:
+        apps = jobController.viewJobApplications(job_id, user.userID, is_admin)
+        return jsonify({"jobID": job_id, "applications": [a.to_dict() for a in apps]}), 200
+    except ValueError as e:
+        msg = str(e).lower()
+        if "not found" in msg:
+            return jsonify({"error": str(e)}), 404
+        return jsonify({"error": str(e)}), 400
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
 
-    application.status = "withdrawn"
-    db.session.commit()
-    return jsonify({"message": "Application withdrawn", "applicationID": application.applicationID})
+
+@job_bp.route("/applied/me", methods=["GET"])
+@jwt_required()
+def getAppliedJobs():
+    user = currentUser()
+    if not user or user.role != "alumni":
+        return jsonify({"error": "Alumni access required"}), 403
+    jobs = jobController.showAppliedJobs(user.userID)
+    return jsonify({"applications": jobs}), 200
+
+
+@job_bp.route("/saved/me", methods=["GET"])
+@jwt_required()
+def getSavedJobs():
+    user = currentUser()
+    if not user or user.role != "alumni":
+        return jsonify({"error": "Alumni access required"}), 403
+    saved_ids = jobController.showSavedJobs(user.userID)
+    return jsonify({"savedJobIDs": saved_ids}), 200
+
+
+@job_bp.route("/<job_id>/save", methods=["POST"])
+@jwt_required()
+def saveJob(job_id):
+    user = currentUser()
+    if not user or user.role != "alumni":
+        return jsonify({"error": "Alumni access required"}), 403
+    try:
+        result = jobController.saveJob(user.userID, job_id)
+        return jsonify(result), 200
+    except ValueError as e:
+        msg = str(e).lower()
+        if "not found" in msg:
+            return jsonify({"error": str(e)}), 404
+        return jsonify({"error": str(e)}), 400
+
+
+@job_bp.route("/<job_id>/testimonials", methods=["POST"])
+@jwt_required()
+def addTestimonial(job_id):
+    user = currentUser()
+    if not user or user.role != "alumni":
+        return jsonify({"error": "Alumni access required"}), 403
+    data = _payload()
+    stars = data.get("stars")
+    comment = data.get("comment")
+    if not stars or not comment:
+        return jsonify({"error": "stars and comment required"}), 400
+    try:
+        testimonial = jobController.addTestimonial(
+            job_id, user.userID, user.name,
+            f"https://ui-avatars.com/api/?name={user.name}&background=random",
+            int(stars), comment
+        )
+        return jsonify({"testimonial": testimonial}), 201
+    except (ValueError, PermissionError) as e:
+        msg = str(e).lower()
+        if "not found" in msg:
+            return jsonify({"error": str(e)}), 404
+        if "already" in msg:
+            return jsonify({"error": str(e)}), 409
+        return jsonify({"error": str(e)}), 400
+
+
+@job_bp.route("/<job_id>/testimonials/<testimonial_id>", methods=["DELETE"])
+@jwt_required()
+def deleteTestimonial(job_id, testimonial_id):
+    user = currentUser()
+    if not user or user.role != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+    try:
+        jobController.deleteTestimonial(job_id, testimonial_id, is_admin=True)
+        return jsonify({"message": "Testimonial deleted"}), 200
+    except (ValueError, PermissionError) as e:
+        msg = str(e).lower()
+        if "not found" in msg:
+            return jsonify({"error": str(e)}), 404
+        return jsonify({"error": str(e)}), 400

@@ -21,6 +21,7 @@
         "src/*"
       ]
     },
+    "types": ["vite/client", "node", "react", "react-dom"],
     "allowImportingTsExtensions": true,
     "noEmit": true
   }

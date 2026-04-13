@@ -1,45 +1,129 @@
-import React, { useState } from 'react';
+// File: Messages.tsx
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { motion } from 'motion/react';
-import { MessageSquare, Search, Send, User, Check, X, Plus } from 'lucide-react';
+import { MessageSquare, Search, Send, User, Check, X, Plus, MoreVertical, Trash2, Flag, Ban, BellOff, CheckCheck } from 'lucide-react';
 import { useToast } from '../components/Toast';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 
 export default function Messages() {
   const { user } = useAuth();
-  const { messages, messageRequests, acceptMessageRequest, rejectMessageRequest, sendMessage } = useData();
+  const { messages, messageRequests, acceptMessageRequest, rejectMessageRequest, sendMessage, loading, alumni } = useData();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'inbox' | 'requests'>('inbox');
+  const navigate = useNavigate();
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
-  const [newMessage, setNewMessage] = useState('');
+  const [chatMessage, setChatMessage] = useState('');
+  const [newMessageBody, setNewMessageBody] = useState('');
   const [showNewMessageModal, setShowNewMessageModal] = useState(false);
   const [newRecipient, setNewRecipient] = useState('');
+  const [searchParams] = useSearchParams();
+  
+  // New state for chat features
+  const [showChatActions, setShowChatActions] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState<{type: 'block' | 'delete', chat: string} | null>(null);
+  const [reportReason, setReportReason] = useState('');
+  const [reportOtherText, setReportOtherText] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [mutedChats, setMutedChats] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim()) return;
-    
-    if (selectedChat) {
-      sendMessage(selectedChat, newMessage);
-      setNewMessage('');
+  // Simulate loading
+  React.useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Close chat actions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setShowChatActions(false);
+    if (showChatActions) {
+      document.addEventListener('click', handleClickOutside);
     }
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showChatActions]);
+
+  // Open new message modal when query params are present
+  useEffect(() => {
+    const newParam = searchParams.get('new');
+    const bodyParam = searchParams.get('body');
+    if (newParam || bodyParam) {
+      if (newParam) {
+        const recipient = alumni.find((person) => person.id === newParam);
+        setNewRecipient(recipient ? recipient.name : newParam);
+      }
+      if (bodyParam) setNewMessageBody(bodyParam);
+      setShowNewMessageModal(true);
+      navigate('/messages', { replace: true });
+    }
+  }, [searchParams, alumni, navigate]);
+
+  const getChatPartnerId = (message: (typeof messages)[number]) =>
+    message.senderId === user?.id ? message.receiverId : message.senderId;
+
+  const resolveRecipientId = (value: string) => {
+    const query = value.trim().toLowerCase();
+    if (!query) return '';
+    const exactMatch = alumni.find(
+      (person) =>
+        person.id.toLowerCase() === query ||
+        person.name.toLowerCase() === query,
+    );
+    if (exactMatch) return exactMatch.id;
+
+    const partialMatch = alumni.find((person) => person.name.toLowerCase().includes(query));
+    return partialMatch?.id || '';
   };
 
-  const handleNewChat = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newRecipient || !newMessage) {
+    if (!chatMessage.trim() || !selectedChat) return;
+    
+    await sendMessage(selectedChat, chatMessage);
+    setChatMessage('');
+  };
+
+  const handleNewChat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const recipientId = resolveRecipientId(newRecipient);
+    if (!recipientId || !newMessageBody.trim()) {
       showToast('Please fill in all fields', 'error');
       return;
     }
     
-    // In a real app, this would create a new chat
-    showToast(`Message sent to ${newRecipient}`, 'success');
+    await sendMessage(recipientId, newMessageBody);
+    setSelectedChat(recipientId);
+    showToast('Message sent successfully', 'success');
     setShowNewMessageModal(false);
     setNewRecipient('');
-    setNewMessage('');
+    setNewMessageBody('');
   };
 
-  const activeChat = messages.find((message) => message.senderId === selectedChat);
+  // Group messages by conversation partner to ensure unique chats
+  const conversations = useMemo(() => {
+    const map = new Map<string, typeof messages[number]>();
+    messages.forEach(msg => {
+      const partnerId = getChatPartnerId(msg);
+      if (!map.has(partnerId)) {
+        map.set(partnerId, msg);
+      }
+    });
+    return Array.from(map.values());
+  }, [messages, user?.id]);
+
+  const activeChat = messages.find((message) => getChatPartnerId(message) === selectedChat);
+  const conversationMessages = selectedChat
+    ? messages
+        .filter(
+          (m) =>
+            (m.senderId === selectedChat && m.receiverId === user?.id) ||
+            (m.senderId === user?.id && m.receiverId === selectedChat),
+        )
+        .sort((a, b) => new Date(a.rawTimestamp || a.time).getTime() - new Date(b.rawTimestamp || b.time).getTime())
+    : [];
 
   return (
     <div className="h-[calc(100vh-140px)] flex flex-col pt-2">
@@ -75,7 +159,7 @@ export default function Messages() {
         selectedChat ? (
           <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm overflow-hidden border border-slate-100">
             {/* Chat Header */}
-            <div className="p-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+            <div className="p-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50 relative">
               <button onClick={() => setSelectedChat(null)} className="md:hidden text-slate-500">
                 <X size={20} />
               </button>
@@ -83,33 +167,102 @@ export default function Messages() {
                 <img src={activeChat?.avatar} alt={activeChat?.sender} className="w-10 h-10 rounded-full object-cover" />
                 {activeChat?.online && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></div>}
               </div>
-              <div>
+              <div className="flex-1">
                 <h3 className="font-bold text-slate-800">{activeChat?.sender}</h3>
                 <p className="text-xs text-slate-500">{activeChat?.online ? 'Online' : 'Offline'}</p>
               </div>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowChatActions(!showChatActions);
+                }} 
+                className="p-2 text-slate-500 hover:bg-slate-100 rounded-full"
+              >
+                <MoreVertical size={20} />
+              </button>
+
+              {/* Chat Actions Dropdown */}
+              {showChatActions && (
+                <div 
+                  className="absolute top-14 right-4 bg-white rounded-xl shadow-lg border border-slate-100 w-48 overflow-hidden z-10"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button 
+                    onClick={() => {
+                      const isMuted = mutedChats.includes(selectedChat);
+                      if (isMuted) {
+                        setMutedChats(mutedChats.filter(id => id !== selectedChat));
+                        showToast('Chat unmuted', 'success');
+                      } else {
+                        setMutedChats([...mutedChats, selectedChat]);
+                        showToast('Chat muted', 'success');
+                      }
+                      setShowChatActions(false);
+                    }}
+                    className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                  >
+                    <BellOff size={16} /> {mutedChats.includes(selectedChat) ? 'Unmute chat' : 'Mute chat'}
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setShowReportModal(true);
+                      setShowChatActions(false);
+                    }}
+                    className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                  >
+                    <Flag size={16} /> Report chat
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setShowConfirmModal({ type: 'block', chat: selectedChat });
+                      setShowChatActions(false);
+                    }}
+                    className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                  >
+                    <Ban size={16} /> Block user
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setShowConfirmModal({ type: 'delete', chat: selectedChat });
+                      setShowChatActions(false);
+                    }}
+                    className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-slate-100"
+                  >
+                    <Trash2 size={16} /> Delete chat
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30">
-              {/* Mock conversation history */}
-              <div className="flex justify-start">
-                <div className="bg-white border border-slate-100 p-3 rounded-2xl rounded-tl-none max-w-[80%] shadow-sm">
-                  <p className="text-sm text-slate-700">Hey, how are you doing?</p>
-                  <span className="text-[10px] text-slate-400 mt-1 block">10:30 AM</span>
-                </div>
-              </div>
-              <div className="flex justify-end">
-                <div className="bg-blue-600 text-white p-3 rounded-2xl rounded-tr-none max-w-[80%] shadow-sm">
-                  <p className="text-sm">I'm good! Just working on some projects.</p>
-                  <span className="text-[10px] text-blue-200 mt-1 block">10:32 AM</span>
-                </div>
-              </div>
-              <div className="flex justify-start">
-                <div className="bg-white border border-slate-100 p-3 rounded-2xl rounded-tl-none max-w-[80%] shadow-sm">
-                  <p className="text-sm text-slate-700">{activeChat?.preview}</p>
-                  <span className="text-[10px] text-slate-400 mt-1 block">{activeChat?.time}</span>
-                </div>
-              </div>
+              {conversationMessages.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-6">No messages yet.</p>
+              ) : (
+                conversationMessages.map((msg) => {
+                  const isMine = msg.senderId === user?.id;
+                  return (
+                    <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                      <div
+                        className={`p-3 rounded-2xl max-w-[80%] shadow-sm ${
+                          isMine
+                            ? 'bg-blue-600 text-white rounded-br-none'
+                            : 'bg-white border border-slate-100 rounded-tl-none text-slate-800'
+                        }`}
+                      >
+                        <p className="text-sm leading-relaxed">{msg.content}</p>
+                        <div className={`flex items-center gap-2 mt-2 ${isMine ? 'justify-end text-blue-100' : 'text-slate-400'}`}>
+                          <span className="text-[10px] uppercase font-bold">{isMine ? 'You' : activeChat?.sender}</span>
+                          <span className="text-[10px]">
+                            {msg.rawTimestamp ? new Date(msg.rawTimestamp).toLocaleTimeString() : msg.time}
+                          </span>
+                          {isMine && msg.status === 'read' && <CheckCheck size={12} />}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             {/* Input Area */}
@@ -117,14 +270,20 @@ export default function Messages() {
               <div className="flex gap-2">
                 <input 
                   type="text" 
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
+                  value={chatMessage}
+                  onChange={(e) => {
+                    setChatMessage(e.target.value);
+                    if (e.target.value.length > 5 && !isTyping && Math.random() > 0.7) {
+                      setIsTyping(true);
+                      setTimeout(() => setIsTyping(false), 3000);
+                    }
+                  }}
                   placeholder="Type a message..." 
                   className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-100 outline-none"
                 />
                 <button 
                   type="submit"
-                  disabled={!newMessage.trim()}
+                  disabled={!chatMessage.trim() || loading?.sendingMessage}
                   className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send size={18} />
@@ -134,18 +293,33 @@ export default function Messages() {
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto space-y-2">
-            {messages.length === 0 ? (
+            {isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="p-4 rounded-2xl border border-transparent animate-pulse">
+                  <div className="flex gap-3">
+                    <div className="w-12 h-12 rounded-full bg-slate-200 shrink-0"></div>
+                    <div className="flex-1 min-w-0 space-y-2 py-1">
+                      <div className="flex justify-between items-start">
+                        <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+                        <div className="h-3 bg-slate-200 rounded w-8"></div>
+                      </div>
+                      <div className="h-3 bg-slate-200 rounded w-2/3"></div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : conversations.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-slate-400">
                 <MessageSquare size={48} className="mb-2 opacity-20" />
                 <p>No messages yet</p>
               </div>
             ) : (
-              messages.map((msg) => (
+              conversations.map((msg) => (
                 <motion.div 
                   key={msg.id}
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
-                  onClick={() => setSelectedChat(msg.senderId)}
+                  onClick={() => setSelectedChat(getChatPartnerId(msg))}
                   className={`p-4 rounded-2xl cursor-pointer transition-all border ${msg.unread ? 'bg-white border-blue-100 shadow-sm' : 'bg-transparent border-transparent hover:bg-white hover:shadow-sm'}`}
                 >
                   <div className="flex gap-3">
@@ -220,7 +394,7 @@ export default function Messages() {
 
       {/* New Message Modal */}
       {showNewMessageModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" data-overlay="true">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -239,23 +413,144 @@ export default function Messages() {
                   type="text" 
                   value={newRecipient}
                   onChange={(e) => setNewRecipient(e.target.value)}
+                  list="alumni-options"
                   className="w-full p-2.5 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-blue-100 text-sm"
                   placeholder="Search for alumni..."
                 />
+                <datalist id="alumni-options">
+                  {alumni.map((person) => (
+                    <option key={person.id} value={person.name} />
+                  ))}
+                </datalist>
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-500 ml-1">Message:</label>
                 <textarea 
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
+                  value={newMessageBody}
+                  onChange={(e) => setNewMessageBody(e.target.value)}
                   className="w-full p-2.5 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-blue-100 text-sm h-32 resize-none"
                   placeholder="Type your message..."
                 />
               </div>
-              <button type="submit" className="btn ui-btn w-full py-3 rounded-xl font-medium">
+              <button type="submit" disabled={!newRecipient.trim() || !newMessageBody.trim()} className="btn ui-btn w-full py-3 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed">
                 Send Message
               </button>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" data-overlay="true">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl"
+          >
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+              <h2 className="font-bold text-lg text-slate-800">Report Chat</h2>
+              <button onClick={() => setShowReportModal(false)} className="p-1 hover:bg-slate-100 rounded-full">
+                <X size={20} className="text-slate-500" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <p className="text-sm text-slate-600">Why are you reporting this chat?</p>
+              
+              <div className="space-y-2">
+                {['Spam', 'Harassment', 'Inappropriate content', 'Other'].map((reason) => (
+                  <label key={reason} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="reportReason" 
+                      value={reason}
+                      checked={reportReason === reason}
+                      onChange={(e) => setReportReason(e.target.value)}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-slate-700">{reason}</span>
+                  </label>
+                ))}
+              </div>
+
+              {reportReason === 'Other' && (
+                <textarea 
+                  value={reportOtherText}
+                  onChange={(e) => setReportOtherText(e.target.value)}
+                  placeholder="Please provide more details..."
+                  className="w-full p-3 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-blue-100 text-sm h-24 resize-none"
+                />
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button 
+                  onClick={() => setShowReportModal(false)}
+                  className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-medium hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => {
+                    if (!reportReason) {
+                      showToast('Please select a reason', 'error');
+                      return;
+                    }
+                    if (reportReason === 'Other' && !reportOtherText.trim()) {
+                      showToast('Please provide details', 'error');
+                      return;
+                    }
+                    showToast('Report submitted successfully', 'success');
+                    setShowReportModal(false);
+                    setReportReason('');
+                    setReportOtherText('');
+                  }}
+                  className="flex-1 py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
+                >
+                  Submit Report
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+      {/* Confirm Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" data-overlay="true">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl p-6"
+          >
+            <h2 className="font-bold text-lg text-slate-800 mb-2">
+              {showConfirmModal.type === 'block' ? 'Block User' : 'Delete Chat'}
+            </h2>
+            <p className="text-sm text-slate-600 mb-6">
+              {showConfirmModal.type === 'block' 
+                ? 'Are you sure you want to block this user? You will no longer receive messages from them.' 
+                : 'Are you sure you want to delete this chat? This action cannot be undone.'}
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setShowConfirmModal(null)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-medium hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  if (showConfirmModal.type === 'block') {
+                    showToast('User blocked', 'success');
+                  } else {
+                    showToast('Chat deleted', 'success');
+                  }
+                  setSelectedChat(null);
+                  setShowConfirmModal(null);
+                }}
+                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
+              >
+                {showConfirmModal.type === 'block' ? 'Block' : 'Delete'}
+              </button>
+            </div>
           </motion.div>
         </div>
       )}
