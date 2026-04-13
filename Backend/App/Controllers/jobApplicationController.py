@@ -1,6 +1,8 @@
+# File: App/Controllers/jobApplicationController.py
+
 from datetime import datetime, timezone
 from App.database import db
-from App.Models import Job, JobApplication
+from App.Models import Job, JobApplication, Message
 
 
 def createApplication(alumni_id: str, job_id: str) -> dict:
@@ -26,10 +28,26 @@ def createApplication(alumni_id: str, job_id: str) -> dict:
     )
     db.session.add(application)
     db.session.commit()
+
+    # Send confirmation message to applicant
+    try:
+        confirmation_msg = Message(
+            senderID="system",
+            receiverID=alumni_id,
+            content=f"Your application for '{job.title}' at {job.company} has been submitted successfully. The employer will review it shortly.",
+            status="sent",
+            attachments=[]
+        )
+        db.session.add(confirmation_msg)
+        db.session.commit()
+    except Exception:
+        # Non‑critical, don't fail the application
+        pass
+
     return application
 
 
-def getApplication(application_id: str, alumni_id: str = None, is_admin: bool = False):
+def viewApplication(application_id: str, alumni_id: str = None, is_admin: bool = False):
     app = db.session.get(JobApplication, application_id)
     if not app:
         raise ValueError("Application not found")
@@ -68,6 +86,22 @@ def updateApplicationStatus(application_id: str, new_status: str, is_admin: bool
     app = db.session.get(JobApplication, application_id)
     if not app:
         raise ValueError("Application not found")
+    old_status = app.status
     app.status = new_status
     db.session.commit()
+
+    # Send message if approved
+    if new_status == "approved" and old_status != "approved":
+        job = db.session.get(Job, app.jobID)
+        if job:
+            msg = Message(
+                senderID="system",
+                receiverID=app.alumniID,
+                content=f"Congratulations! Your application for '{job.title}' has been approved. The employer will contact you soon.",
+                status="sent",
+                attachments=[]
+            )
+            db.session.add(msg)
+            db.session.commit()
+
     return app

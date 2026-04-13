@@ -5,8 +5,15 @@ from App.Models import Message, User
 def requestMessage(sender_id: str, receiver_id: str, content: str = None) -> str:
     if not receiver_id:
         raise ValueError("receiverID is required")
+    if sender_id == receiver_id:
+        raise ValueError("Cannot connect to yourself")
     receiver = db.session.get(User, receiver_id)
-    if receiver and sender_id in (receiver.blockedUserIDs or []):
+    if not receiver:
+        raise ValueError("Target alumni not found")
+    existing = Message.query.filter_by(senderID=sender_id, receiverID=receiver_id, status="requested").first()
+    if existing:
+        raise ValueError("Connection request already sent")
+    if sender_id in (receiver.blockedUserIDs or []):
         raise PermissionError("You are blocked by this user")
     msg = Message(
         senderID=sender_id,
@@ -61,15 +68,15 @@ def sendMessage(sender_id: str, receiver_id: str, content: str) -> str:
     return msg.messageID
 
 
-def getInbox(user_id: str) -> list:
+def showInbox(user_id: str) -> list:
     return Message.query.filter_by(receiverID=user_id).order_by(Message.timestamp.desc()).limit(50).all()
 
 
-def getSent(user_id: str) -> list:
+def showSentMessages(user_id: str) -> list:
     return Message.query.filter_by(senderID=user_id).order_by(Message.timestamp.desc()).limit(50).all()
 
 
-def getMessageRequests(user_id: str) -> list:
+def showMessageRequests(user_id: str) -> list:
     """Return pending message requests for the user."""
     return Message.query.filter_by(receiverID=user_id, status="requested").order_by(Message.timestamp.desc()).all()
 

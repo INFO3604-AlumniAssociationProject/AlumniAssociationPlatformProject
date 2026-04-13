@@ -4,44 +4,18 @@ from App.database import db
 from App.Models import CommunityBoard, BoardPost, Job, Event, Alumni
 
 
-def getAllPosts() -> list:
-    """Return all posts across all boards for the feed."""
+def listAllPostsRaw() -> list:
+    """Return all posts across all boards for the feed (raw model objects)."""
     return BoardPost.query.order_by(BoardPost.postedDate.desc()).all()
 
 
-def _getBoard(board_id: str) -> CommunityBoard:
+def listBoardMembers(board_id: str) -> list:
+    """Return list of members (alumni) for a board."""
     board = db.session.get(CommunityBoard, board_id)
     if not board:
         raise ValueError("Board not found")
-    return board
 
-
-def _boardMemberIds(board: CommunityBoard) -> list[str]:
-    return list({*(board.memberIDs or []), board.alumniID})
-
-
-def _requireBoardMember(board: CommunityBoard, alumni_id: str) -> None:
-    if alumni_id not in _boardMemberIds(board):
-        raise PermissionError("Join the board before contributing")
-
-
-def _parseDate(value: str, field_name: str):
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
-    except (TypeError, ValueError):
-        raise ValueError(f"{field_name} must be YYYY-MM-DD")
-
-
-def _parseTime(value: str):
-    try:
-        return datetime.strptime(value, "%H:%M").time()
-    except (TypeError, ValueError):
-        raise ValueError("time must be HH:MM")
-
-def getBoardMembers(board_id: str) -> list:
-    """Return list of members (alumni) for a board."""
-    board = _getBoard(board_id)
-    member_ids = _boardMemberIds(board)
+    member_ids = list({*(board.memberIDs or []), board.alumniID})
     members = []
     for uid in member_ids:
         alumni = db.session.get(Alumni, uid)
@@ -55,6 +29,7 @@ def getBoardMembers(board_id: str) -> list:
                 "isAdmin": (uid == board.alumniID)
             })
     return members
+
 
 def createBoard(owner_id: str, name: str, description: str = None) -> str:
     if not name or not name.strip():
@@ -112,15 +87,16 @@ def listBoardsForUser(alumni_id: str) -> list:
         })
     return results
 
-def getBoardDetails(board_id: str, alumni_id: str = None) -> dict:
+
+def viewBoardDetails(board_id: str, alumni_id: str = None) -> dict:
     board = db.session.get(CommunityBoard, board_id)
     if not board:
         raise ValueError("Board not found")
-    
+
     posts = BoardPost.query.filter_by(boardID=board_id).order_by(BoardPost.postedDate.desc()).limit(50).all()
     jobs = Job.query.filter_by(boardID=board_id).order_by(Job.postedDate.desc()).limit(50).all()
     events = Event.query.filter_by(boardID=board_id).order_by(Event.date.asc(), Event.time.asc()).limit(50).all()
-    
+
     return {
         "board": board,
         "posts": posts,
@@ -130,10 +106,17 @@ def getBoardDetails(board_id: str, alumni_id: str = None) -> dict:
 
 
 def createPostInBoard(board_id: str, alumni_id: str, content: str) -> str:
-    board = _getBoard(board_id)
-    _requireBoardMember(board, alumni_id)
+    board = db.session.get(CommunityBoard, board_id)
+    if not board:
+        raise ValueError("Board not found")
+
+    member_ids = list({*(board.memberIDs or []), board.alumniID})
+    if alumni_id not in member_ids:
+        raise PermissionError("Join the board before contributing")
+
     if not content.strip():
         raise ValueError("content is required")
+
     post = BoardPost(
         boardID=board_id,
         alumniID=alumni_id,

@@ -21,3 +21,14 @@ class EventRegistration(db.Model):
 
     def __repr__(self):
         return f'<EventRegistration {self.registrationID} for Event {self.eventID}>'
+    
+    def to_dict(self):
+        return {
+            "registrationID": self.registrationID,
+            "eventID": self.eventID,
+            "attendeeID": self.attendeeID,
+            "registrationDate": self.registrationDate.isoformat(),
+            "status": self.status,
+            "paymentStatus": self.paymentStatus,
+            "checkedInAt": self.checkedInAt.isoformat() if self.checkedInAt else None
+        }

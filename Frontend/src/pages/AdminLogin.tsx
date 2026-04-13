@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowRight, Lock, ArrowLeft } from 'lucide-react';
+import { ShieldCheck, ArrowRight, ArrowLeft } from 'lucide-react';
 import Logo from '../components/Logo';
 import { useToast } from '../components/Toast';
 
-export default function Login() {
+export default function AdminLogin() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -19,9 +19,9 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await login(email, password, 'alumni');
-      showToast(`Welcome back, ${email.split('@')[0]}!`, 'success');
-      navigate('/dashboard');
+      await login(email, password, 'admin');
+      showToast(`Welcome back, Admin ${email.split('@')[0]}!`, 'success');
+      navigate('/admin');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Login failed';
       showToast(message, 'error');
@@ -36,7 +36,7 @@ export default function Login() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="ui-card rounded-2xl p-6 mb-4 relative overflow-hidden"
+        className="ui-card rounded-2xl p-6 mb-4 border-t-4 border-t-[var(--uwi-blue-600)] relative overflow-hidden"
       >
         <Link 
           to="/welcome" 
@@ -48,42 +48,34 @@ export default function Login() {
           <span className="text-xs font-bold">Back</span>
         </Link>
 
-        <Link 
-          to="/admin-secret-login" 
-          className="absolute bottom-2 right-2 p-2 opacity-0 hover:opacity-10 transition-opacity cursor-default"
-          title="Admin Access"
-        >
-          <Lock size={12} />
-        </Link>
-
         <div className="text-center mb-6">
           <div className="w-20 h-20 bg-blue-50 rounded-full mx-auto mb-3 flex items-center justify-center shadow-inner overflow-hidden">
-            <Logo className="w-full h-full" />
+            <ShieldCheck size={40} className="text-[var(--uwi-blue-700)]" />
           </div>
-          <h1 className="text-2xl font-bold text-[var(--uwi-blue-800)]">Login</h1>
-          <p className="text-sm text-slate-600">Sign in to your Alumni account.</p>
+          <h1 className="text-2xl font-bold text-[var(--uwi-blue-800)]">Admin Portal</h1>
+          <p className="text-sm text-slate-600">Restricted Access</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="login-email" className="text-sm font-medium text-slate-600 block mb-1">Email</label>
+            <label htmlFor="admin-login-email" className="text-sm font-medium text-slate-600 block mb-1">Admin Email</label>
             <input 
-              id="login-email"
+              id="admin-login-email"
               name="email"
               type="email" 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-[var(--uwi-blue-600)] focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-              placeholder="name@mail.com"
+              placeholder="admin@mail.com"
               autoComplete="email"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="login-password" className="text-sm font-medium text-slate-600 block mb-1">Password</label>
+            <label htmlFor="admin-login-password" className="text-sm font-medium text-slate-600 block mb-1">Password</label>
             <input 
-              id="login-password"
+              id="admin-login-password"
               name="password"
               type="password" 
               value={password}
@@ -93,11 +85,6 @@ export default function Login() {
               autoComplete="current-password"
               required
             />
-            <div className="mt-2 text-right">
-              <Link to="/forgot-password" className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline">
-                Forgot Password?
-              </Link>
-            </div>
           </div>
 
           <button 
@@ -105,7 +92,7 @@ export default function Login() {
             disabled={loading || !email || !password}
             className="btn ui-btn w-full py-3 rounded-xl font-medium flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? 'Authenticating...' : 'Secure Login'}
             {!loading && <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />}
           </button>
         </form>

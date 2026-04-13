@@ -6,22 +6,18 @@ from App.database import db
 from App.Models import Job, JobApplication, Alumni, User
 
 
-def _parse_expiry(expiry_date_str: str) -> date:
-    try:
-        expiry_date = datetime.strptime(expiry_date_str, "%Y-%m-%d").date()
-    except ValueError:
-        raise ValueError("expiryDate must be YYYY-MM-DD")
-    # allow expiry dates in the past (tests use fixed dates)
-    return expiry_date
-
-
 def createJob(alumni_id: str, board_id: str, title: str, company: str,
               description: str, expiry_date_str: str, salary_range: str = None,
               location: str = None, admin_id: str = None) -> str:
     title_clean = title.strip()
     if not title_clean:
         raise ValueError("Title cannot be empty")
-    expiry_date = _parse_expiry(expiry_date_str)
+
+    # Inline expiry date parsing
+    try:
+        expiry_date = datetime.strptime(expiry_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        raise ValueError("expiryDate must be YYYY-MM-DD")
 
     job = Job(
         boardID=board_id,
@@ -64,7 +60,7 @@ def saveJob(alumni_id: str, job_id: str) -> dict:
     return {"saved": saved, "savedJobIDs": user.savedJobIDs}
 
 
-def getSavedJobs(alumni_id: str) -> list:
+def showSavedJobs(alumni_id: str) -> list:
     """Return list of saved job IDs."""
     user = db.session.get(User, alumni_id)
     if not user:
@@ -110,7 +106,7 @@ def deleteTestimonial(job_id: str, testimonial_id: str, is_admin: bool = False) 
     db.session.commit()
 
 
-def getAppliedJobsWithStatus(alumni_id: str) -> list:
+def showAppliedJobs(alumni_id: str) -> list:
     """Return list of job applications with job details for current user."""
     apps = JobApplication.query.filter_by(alumniID=alumni_id).order_by(JobApplication.applicationDate.desc()).all()
     result = []
@@ -143,7 +139,11 @@ def updateJob(job_id: str, requester_id: str, is_admin: bool = False, **fields) 
             setattr(job, field, value)
 
     if "expiryDate" in fields and fields["expiryDate"]:
-        job.expiryDate = _parse_expiry(fields["expiryDate"])
+        # Inline expiry date parsing
+        try:
+            job.expiryDate = datetime.strptime(fields["expiryDate"], "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("expiryDate must be YYYY-MM-DD")
 
     db.session.commit()
 
@@ -158,11 +158,13 @@ def closeJob(job_id: str, requester_id: str, is_admin: bool = False) -> None:
     db.session.commit()
 
 
-def listJobs(status: str = "open") -> list:
-    return Job.query.filter_by(status=status).order_by(Job.postedDate.desc()).all()
+def listJobs(status: str = "open", limit: int = None, offset: int = 0, current_user=None) -> list:
+    """List jobs. If `limit` is provided returns serialized jobs with applied/saved flags for alumni.
+    Otherwise returns model objects.
+    """
+    if limit is None:
+        return Job.query.filter_by(status=status).order_by(Job.postedDate.desc()).all()
 
-
-def listAllJobs(current_user=None, limit: int = 200, offset: int = 0) -> list:
     limit = min(max(int(limit or 200), 1), 500)
     offset = max(int(offset or 0), 0)
     query = Job.query.order_by(Job.postedDate.desc()).offset(offset).limit(limit)
@@ -187,7 +189,7 @@ def listAllJobs(current_user=None, limit: int = 200, offset: int = 0) -> list:
     return result
 
 
-def getJobApplications(job_id: str, requester_id: str, is_admin: bool = False) -> list:
+def viewJobApplications(job_id: str, requester_id: str, is_admin: bool = False) -> list:
     job = db.session.get(Job, job_id)
     if not job:
         raise ValueError("Job not found")

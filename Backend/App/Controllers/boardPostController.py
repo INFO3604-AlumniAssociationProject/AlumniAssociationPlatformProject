@@ -30,7 +30,7 @@ def createBoardPost(alumni_id: str, board_id: str, content: str):
     return post
 
 
-def getBoardPost(post_id: str):
+def viewBoardPost(post_id: str):
     post = db.session.get(BoardPost, post_id)
     return post
 
@@ -69,7 +69,7 @@ def deleteBoardPost(post_id: str, alumni_id: str, is_admin: bool = False) -> Non
     db.session.commit()
 
 
-def toggleLike(post_id: str, alumni_id: str) -> dict:
+def likePost(post_id: str, alumni_id: str) -> dict:
     post = db.session.get(BoardPost, post_id)
     if not post:
         raise ValueError(f"Post {post_id} not found")
@@ -86,7 +86,7 @@ def toggleLike(post_id: str, alumni_id: str) -> dict:
     post.likesCount = len(liked_by)
     db.session.commit()
     
-    return {"likesCount": post.likesCount, "liked": liked}
+    return {"likesCount": post.likesCount, "liked": liked, "likedBy": post.likedBy or []}
 
 
 def addComment(post_id: str, alumni_id: str, alumni_name: str, content: str) -> dict:
@@ -112,7 +112,7 @@ def addComment(post_id: str, alumni_id: str, alumni_name: str, content: str) -> 
     return comment
 
 
-def getAllPosts() -> list:
+def listAllPosts() -> list:
     """Return serialized posts with author names and comment counts."""
     posts = BoardPost.query.order_by(BoardPost.postedDate.desc()).all()
     result = []

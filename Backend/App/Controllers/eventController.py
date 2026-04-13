@@ -2,36 +2,31 @@ from datetime import datetime, date
 from flask import current_app
 from App.database import db
 from App.Models import Event, EventRegistration, Message
+from App.Controllers import eventRegistrationControllers
 
 
-def getRegisteredEvents(alumni_id: str) -> list:
+def listRegisteredEvents(alumni_id: str) -> list:
     """Return list of event IDs that the alumni is registered for."""
     registrations = EventRegistration.query.filter_by(attendeeID=alumni_id, status="registered").all()
     return [reg.eventID for reg in registrations]
 
-def toggleRegisterEvent(event_id: str, alumni_id: str) -> dict:
-    """Register or unregister from an event."""
-    event = db.session.get(Event, event_id)
-    if not event or event.status not in {"active", "approved"}:
-        raise ValueError("Event not available")
-    # allow handling past events (tests and historical records may use past dates)
-    
+
+def registerEvent(event_id: str, alumni_id: str) -> dict:
+    """Register an alumni for an event (non-toggle)."""
+    reg_id = eventRegistrationControllers.registerForEvent(event_id, alumni_id)
+    return {"registered": True, "registrationID": reg_id}
+
+
+def unregisterEvent(event_id: str, alumni_id: str) -> dict:
+    """Unregister an alumni from an event."""
     existing = EventRegistration.query.filter_by(eventID=event_id, attendeeID=alumni_id).first()
-    if existing:
-        # Unregister
-        db.session.delete(existing)
-        db.session.commit()
-        return {"registered": False}
-    else:
-        # Register
-        attendee_count = EventRegistration.query.filter_by(eventID=event_id, status="registered").count()
-        if attendee_count >= event.maxAttendees:
-            raise ValueError("Event is full")
-        registration = EventRegistration(eventID=event_id, attendeeID=alumni_id, status="registered")
-        db.session.add(registration)
-        db.session.commit()
-        return {"registered": True}
-    
+    if not existing:
+        raise ValueError("Registration not found")
+    # delegate to registration controller to cancel (maintain status history)
+    eventRegistrationControllers.cancelRegistration(existing.registrationID, alumni_id, is_admin=False)
+    return {"registered": False}
+
+
 def createEvent(alumni_id: str, board_id: str, title: str, description: str,
                 date_str: str, time_str: str, location: str, max_attendees: int) -> str:
     try:
@@ -59,26 +54,7 @@ def createEvent(alumni_id: str, board_id: str, title: str, description: str,
     db.session.commit()
     return event.eventID
 
-
-def registerAttendee(event_id: str, attendee_id: str) -> str:
-    event = db.session.get(Event, event_id)
-    if not event or event.status not in {"active", "approved"}:
-        raise ValueError("Event not available")
     
-    already = EventRegistration.query.filter_by(eventID=event_id, attendeeID=attendee_id).first()
-    if already:
-        raise ValueError("Attendee already registered")
-    
-    registered_count = EventRegistration.query.filter_by(eventID=event_id, status="registered").count()
-    if registered_count >= event.maxAttendees:
-        raise ValueError("Event is full")
-    
-    registration = EventRegistration(eventID=event_id, attendeeID=attendee_id, status="registered")
-    db.session.add(registration)
-    db.session.commit()
-    return registration.registrationID
-
-
 def cancelEvent(event_id: str, requester_id: str, is_admin: bool = False) -> None:
     event = db.session.get(Event, event_id)
     if not event:
@@ -86,6 +62,16 @@ def cancelEvent(event_id: str, requester_id: str, is_admin: bool = False) -> Non
     if not is_admin and event.alumniID != requester_id:
         raise PermissionError("Only the event creator or admin can cancel this event")
     event.status = "cancelled"
+    db.session.commit()
+
+
+def reopenEvent(event_id: str, requester_id: str, is_admin: bool = False) -> None:
+    event = db.session.get(Event, event_id)
+    if not event:
+        raise ValueError("Event not found")
+    if not is_admin and event.alumniID != requester_id:
+        raise PermissionError("Only the event creator or admin can reopen this event")
+    event.status = "active"
     db.session.commit()
 
 
@@ -110,13 +96,16 @@ def sendReminders(event_id: str, sender_id: str) -> int:
     return count
 
 
-def listEvents(status: str = "active") -> list:
-    if status == "active":
-        return Event.query.filter(Event.status.in_(["active", "approved"])).order_by(Event.date.asc(), Event.time.asc()).all()
-    return Event.query.filter_by(status=status).order_by(Event.date.asc(), Event.time.asc()).all()
+def listEvents(status: str = "active", limit: int = None, offset: int = 0, current_user=None) -> list:
+    """List events. If `limit` is provided, returns serialized dicts (supports pagination and registered flag).
+    Otherwise returns model objects similar to the previous `listEvents` behavior.
+    """
+    if limit is None:
+        if status == "active":
+            return Event.query.filter(Event.status.in_(["active", "approved"]) ).order_by(Event.date.asc(), Event.time.asc()).all()
+        return Event.query.filter_by(status=status).order_by(Event.date.asc(), Event.time.asc()).all()
 
-
-def listAllEvents(current_user=None, limit: int = 200, offset: int = 0) -> list:
+    # Paginated/serialized mode (replacement for previous listAllEvents)
     limit = min(max(int(limit or 200), 1), 500)
     offset = max(int(offset or 0), 0)
     query = Event.query.order_by(Event.date.asc(), Event.time.asc()).offset(offset).limit(limit)

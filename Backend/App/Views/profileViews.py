@@ -1,117 +1,83 @@
-from flask import Blueprint, g, jsonify, render_template, request
+from flask import Blueprint, jsonify
+from flask_jwt_extended import jwt_required
+from App.Controllers import profileController
+from App.Models import Alumni
+from App.database import db
+from App.utils import _payload
+from App.Controllers.userController import currentUser
 
-from .userController import role_required
-from ..Models import Alumni, Profile
-from ..database import db
 
 profile_bp = Blueprint("profiles", __name__, url_prefix="/profiles")
 
 
-def _payload():
-    return request.get_json(silent=True) or request.form.to_dict(flat=True)
+@profile_bp.route("/me/data", methods=["GET"])
+@jwt_required()
+def myProfileApi():
+    user = currentUser()
+    if not user or user.role != "alumni":
+        return jsonify({"error": "Alumni access required"}), 403
+    profile_dict = profileController.viewProfile(user.userID)
+    return jsonify({
+        "profile": profile_dict,
+        "user": {
+            "name": user.name,
+            "email": user.email,
+            "role": user.role
+        }
+    }), 200
 
 
-def _to_bool(value, default=False):
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+@profile_bp.route("/<alumni_id>", methods=["GET"])
+@jwt_required()
+def publicProfile(alumni_id):
+    user = currentUser()
+    if not user:
+        return jsonify({"error": "Authentication required"}), 401
+    target = db.session.get(Alumni, alumni_id)
+    if not target:
+        return jsonify({"error": "Alumni not found"}), 404
+    profile_dict = profileController.viewProfile(alumni_id)
+    return jsonify({
+        "alumni": {"name": target.name, "email": target.email},
+        "profile": profile_dict
+    }), 200
 
 
-def _profile_dict(profile):
-    return {
-        "profileID": profile.profileID,
-        "alumniID": profile.alumniID,
-        "bio": profile.bio,
-        "profilePicture": profile.profilePicture,
-        "contactInfo": profile.contactInfo or [],
-        "socialLinks": profile.socialLinks or [],
-        "profileVisibility": profile.profileVisibility,
-        "showCurrentJob": profile.showCurrentJob,
-        "allowMessages": profile.allowMessages,
-        "showEmail": profile.showEmail,
-    }
-
-
-@profile_bp.get("/me")
-@role_required("alumni")
-def my_profile():
-    profile = Profile.query.filter_by(alumniID=g.current_user.userID).first()
-    if not profile:
-        profile = Profile(alumniID=g.current_user.userID)
-        db.session.add(profile)
-        db.session.commit()
-    return render_template("profile.html", profile=profile, user=g.current_user)
-
-
-@profile_bp.get("/me/data")
-@role_required("alumni")
-def my_profile_api():
-    """API endpoint for frontend to fetch profile data"""
-    profile = Profile.query.filter_by(alumniID=g.current_user.userID).first()
-    if not profile:
-        profile = Profile(alumniID=g.current_user.userID)
-        db.session.add(profile)
-        db.session.commit()
-    return jsonify({"profile": _profile_dict(profile), "user": {
-        "name": g.current_user.name,
-        "email": g.current_user.email,
-        "role": g.current_user.role,
-    }})
-
-
-@profile_bp.get("/<alumni_id>")
-@role_required("alumni", "admin")
-def public_profile(alumni_id):
-    profile = Profile.query.filter_by(alumniID=alumni_id).first()
-    alumni = db.session.get(Alumni, alumni_id)
-    if not profile or not alumni:
-        return jsonify({"error": "Profile not found"}), 404
-    return jsonify({"alumni": {"name": alumni.name, "email": alumni.email}, "profile": _profile_dict(profile)})
-
-
-@profile_bp.patch("/me/bio")
-@role_required("alumni")
+@profile_bp.route("/me/bio", methods=["PATCH"])
+@jwt_required()
 def updateBio():
+    user = currentUser()
+    if not user or user.role != "alumni":
+        return jsonify({"error": "Alumni access required"}), 403
     data = _payload()
-    profile = Profile.query.filter_by(alumniID=g.current_user.userID).first()
-    if not profile:
-        profile = Profile(alumniID=g.current_user.userID)
-        db.session.add(profile)
-
-    profile.bio = (data.get("bio") or "").strip()
-    if data.get("contactInfo") is not None:
-        profile.contactInfo = data.get("contactInfo") or []
-    if data.get("socialLinks") is not None:
-        profile.socialLinks = data.get("socialLinks") or []
-    if data.get("profileVisibility"):
-        profile.profileVisibility = data["profileVisibility"].strip().lower()
-    if data.get("showCurrentJob") is not None:
-        profile.showCurrentJob = _to_bool(data.get("showCurrentJob"), default=True)
-    if data.get("allowMessages") is not None:
-        profile.allowMessages = _to_bool(data.get("allowMessages"), default=True)
-    if data.get("showEmail") is not None:
-        profile.showEmail = _to_bool(data.get("showEmail"), default=False)
-
-    db.session.commit()
-    return jsonify({"message": "Profile bio updated", "profile": _profile_dict(profile)})
+    try:
+        updated = profileController.updateBio(
+            alumni_id=user.userID,
+            bio=data.get("bio"),
+            contact_info=data.get("contactInfo"),
+            social_links=data.get("socialLinks"),
+            profile_visibility=data.get("profileVisibility"),
+            show_current_job=data.get("showCurrentJob"),
+            allow_messages=data.get("allowMessages"),
+            show_email=data.get("showEmail")
+        )
+        return jsonify({"message": "Profile updated", "profile": updated.to_dict()}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 
-@profile_bp.patch("/me/photo")
-@role_required("alumni")
+@profile_bp.route("/me/photo", methods=["PATCH"])
+@jwt_required()
 def uploadPhoto():
+    user = currentUser()
+    if not user or user.role != "alumni":
+        return jsonify({"error": "Alumni access required"}), 403
     data = _payload()
-    photo_url = (data.get("profilePicture") or "").strip()
+    photo_url = data.get("profilePicture")
     if not photo_url:
         return jsonify({"error": "profilePicture URL is required"}), 400
-
-    profile = Profile.query.filter_by(alumniID=g.current_user.userID).first()
-    if not profile:
-        profile = Profile(alumniID=g.current_user.userID)
-        db.session.add(profile)
-
-    profile.profilePicture = photo_url
-    db.session.commit()
-    return jsonify({"message": "Profile photo updated", "profile": _profile_dict(profile)})
-
+    try:
+        updated = profileController.updateProfilePhoto(user.userID, photo_url)
+        return jsonify({"message": "Profile photo updated", "profile": updated.to_dict()}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400

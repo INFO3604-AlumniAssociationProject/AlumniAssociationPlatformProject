@@ -1,5 +1,6 @@
 from App.database import db
 from App.Models import User, Event, Job, Message
+from App.Controllers import eventController
 
 
 def approveUser(user_id: str) -> None:
@@ -57,16 +58,13 @@ def generateReport() -> dict:
 
 
 def manageEvent(event_id: str, action: str) -> None:
-    event = db.session.get(Event, event_id)
-    if not event:
-        raise ValueError(f"Event {event_id} not found")
+    # delegate to eventController for consistent permission checks and behavior
     if action == "cancel":
-        event.status = "cancelled"
+        eventController.cancelEvent(event_id, requester_id=None, is_admin=True)
     elif action == "reopen":
-        event.status = "active"
+        eventController.reopenEvent(event_id, requester_id=None, is_admin=True)
     else:
         raise ValueError("action must be cancel or reopen")
-    db.session.commit()
 
 
 def sendAnnouncement(admin_id: str, content: str) -> int:

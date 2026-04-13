@@ -1,6 +1,8 @@
+# File: App/Controllers/eventRegistrationControllers.py
+
 from datetime import datetime, timezone
 from App.database import db
-from App.Models import Event, EventRegistration
+from App.Models import Event, EventRegistration, Message
 
 
 def registerForEvent(event_id: str, attendee_id: str, payment_status: str = "pending") -> str:
@@ -23,6 +25,22 @@ def registerForEvent(event_id: str, attendee_id: str, payment_status: str = "pen
     )
     db.session.add(registration)
     db.session.commit()
+
+    # Send confirmation message to attendee
+    try:
+        confirmation_msg = Message(
+            senderID="system",
+            receiverID=attendee_id,
+            content=f"You have successfully registered for the event '{event.title}'. We look forward to seeing you!",
+            status="sent",
+            attachments=[]
+        )
+        db.session.add(confirmation_msg)
+        db.session.commit()
+    except Exception:
+        # Non‑critical; don't fail registration
+        pass
+
     return registration.registrationID
 
 

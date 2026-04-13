@@ -10,6 +10,7 @@ class Alumni(User):
     degree = db.Column(db.String(120), nullable=False)
     currentJobTitle = db.Column(db.String(120), nullable=False, default="")
     company = db.Column(db.String(120), nullable=True)
+    location = db.Column(db.String(120), nullable=True, default="Trinidad & Tobago")
     isPublicProfile = db.Column(db.Boolean, nullable=False, default=True)
 
     profile = db.relationship("Profile", back_populates="alumni", uselist=False)
@@ -23,3 +24,26 @@ class Alumni(User):
 
     def __repr__(self):
         return f'<Alumni {self.email } - {self.graduationYear}>'
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if getattr(self, 'currentJobTitle', None) is None:
+            self.currentJobTitle = ""
+        if getattr(self, 'location', None) is None:
+            self.location = "Trinidad & Tobago"
+        if getattr(self, 'isPublicProfile', None) is None:
+            self.isPublicProfile = True
+
+    def to_dict(self):
+        base = super().to_dict()
+        base.update({
+            "alumniID": self.alumniID,
+            "graduationYear": self.graduationYear,
+            "faculty": self.faculty,
+            "degree": self.degree,
+            "currentJobTitle": self.currentJobTitle,
+            "company": self.company,
+            "location": self.location,
+            "isPublicProfile": self.isPublicProfile,
+        })
+        return base

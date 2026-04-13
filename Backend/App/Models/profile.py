@@ -19,3 +19,33 @@ class Profile(db.Model):
 
     def __repr__(self):
         return f'<Profile {self.profileID}>'
+    
+    def __init__(self, *args, **kwargs):
+        # Call base constructor then set defaults without overwriting provided values
+        super().__init__(*args, **kwargs)
+        if getattr(self, 'contactInfo', None) is None:
+            self.contactInfo = []
+        if getattr(self, 'socialLinks', None) is None:
+            self.socialLinks = []
+        if getattr(self, 'profileVisibility', None) is None:
+            self.profileVisibility = 'public'
+        if getattr(self, 'showCurrentJob', None) is None:
+            self.showCurrentJob = True
+        if getattr(self, 'allowMessages', None) is None:
+            self.allowMessages = True
+        if getattr(self, 'showEmail', None) is None:
+            self.showEmail = False
+
+    def to_dict(self):
+        return {
+            "profileID": self.profileID,
+            "alumniID": self.alumniID,
+            "bio": self.bio,
+            "profilePicture": self.profilePicture,
+            "contactInfo": self.contactInfo or [],
+            "socialLinks": self.socialLinks or [],
+            "profileVisibility": self.profileVisibility,
+            "showCurrentJob": self.showCurrentJob,
+            "allowMessages": self.allowMessages,
+            "showEmail": self.showEmail,
+        }

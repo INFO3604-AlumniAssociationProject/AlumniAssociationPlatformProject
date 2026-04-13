@@ -2,12 +2,12 @@ import re
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import get_jwt_identity
 from App.database import db
-from App.Models import User, Alumni, Admin, Profile, Job
+from App.Models import User, Alumni, Admin, Profile
 from App.Controllers.auth import authenticate_user, issue_access_token
 from App.utils import _to_bool
 
 
-def getCurrentUser():
+def currentUser():
     """Retrieve current user from JWT identity. Returns User object or None."""
     user_id = get_jwt_identity()
     if not user_id:
@@ -170,7 +170,7 @@ def sendNotification(user_id: str, channel: str, message: str) -> dict:
     }
 
 
-def getNotificationPreferences(user_id: str) -> dict:
+def showNotificationPreferences(user_id: str) -> dict:
     """Return user's notification preferences."""
     user = db.session.get(User, user_id)
     if not user:
@@ -196,35 +196,3 @@ def updateNotificationPreferences(user_id: str, preferences: dict) -> dict:
     user.notificationPreferences = existing
     db.session.commit()
     return existing
-
-
-def getSavedJobs(user_id: str) -> list:
-    """Return saved job IDs for a user."""
-    user = db.session.get(User, user_id)
-    if not user:
-        raise ValueError("User not found")
-    return [job_id for job_id in (user.savedJobIDs or []) if not str(job_id).startswith("reset:")]
-
-
-def saveJob(user_id: str, job_id: str) -> dict:
-    """
-    Toggle save/unsave a job for the given user.
-    Returns {"saved": bool, "savedJobIDs": list}
-    """
-    user = db.session.get(User, user_id)
-    if not user:
-        raise ValueError("User not found")
-    job = db.session.get(Job, job_id)
-    if not job:
-        raise ValueError("Job not found")
-    reset_tokens = {saved_id for saved_id in (user.savedJobIDs or []) if str(saved_id).startswith("reset:")}
-    saved_set = {saved_id for saved_id in (user.savedJobIDs or []) if not str(saved_id).startswith("reset:")}
-    if job_id in saved_set:
-        saved_set.remove(job_id)
-        saved = False
-    else:
-        saved_set.add(job_id)
-        saved = True
-    user.savedJobIDs = list(reset_tokens | saved_set)
-    db.session.commit()
-    return {"saved": saved, "savedJobIDs": getSavedJobs(user_id)}

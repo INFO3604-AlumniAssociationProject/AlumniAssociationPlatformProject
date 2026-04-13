@@ -18,6 +18,15 @@ export interface Application {
   status: 'pending' | 'approved' | 'rejected';
 }
 
+export interface JobTestimonial {
+  id: string;
+  name: string;
+  avatar: string;
+  stars: number;
+  comment: string;
+  timestamp: string;
+}
+
 export interface Job {
   id: string;
   title: string;
@@ -29,10 +38,12 @@ export interface Job {
   description: string;
   applied: boolean;
   communityId?: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'closed';
   applicants?: Application[];
   postedBy?: string;
   applicationStatus?: 'pending' | 'approved' | 'rejected';
+  saved?: boolean;
+  testimonials?: JobTestimonial[];
 }
 
 export interface Community {
@@ -66,6 +77,11 @@ export interface Event {
   registered: boolean;
   communityId?: string;
   creatorId?: string;
+  status?: 'pending' | 'approved' | 'cancelled';
+  description?: string;
+  faculty?: string;
+  department?: string;
+  hostClub?: string;
 }
 
 export interface Message {
@@ -75,6 +91,7 @@ export interface Message {
   sender: string;
   content: string;
   time: string;
+  rawTimestamp?: string;
   status: 'requested' | 'accepted' | 'read' | 'unread';
   avatar: string;
   online?: boolean;
@@ -98,6 +115,14 @@ export interface UserProfile {
   avatar: string;
   coverImage: string;
   isPrivate: boolean;
+  skills?: string[];
+  experience?: {
+    id: string;
+    title: string;
+    company: string;
+    duration: string;
+    description?: string;
+  }[];
 }
 
 export interface Comment {
@@ -115,6 +140,7 @@ export interface Post {
   content: string;
   time: string;
   likes: number;
+  likedBy: string[];
   commentsCount: number;
   comments: Comment[];
   liked?: boolean;
@@ -148,27 +174,46 @@ interface DataContextType {
     registeredEventsCount: number;
     pendingJobsCount: number;
   };
-  addJob: (job: Omit<Job, 'id' | 'applied' | 'status' | 'applicants'>) => void;
+  addJob: (job: Omit<Job, 'id' | 'applied' | 'status' | 'applicants'>) => Promise<boolean>;
   toggleApplyJob: (id: string) => void;
-  submitJobApplication: (jobId: string, application: Omit<Application, 'id' | 'date'>) => void;
-  approveJob: (id: string) => void;
-  rejectJob: (id: string) => void;
-  approveApplication: (jobId: string, applicantId: string) => void;
-  rejectApplication: (jobId: string, applicantId: string) => void;
-  addEvent: (event: Omit<Event, 'id' | 'registered'>) => void;
+  submitJobApplication: (jobId: string, application: Omit<Application, 'id' | 'date' | 'status'>) => Promise<void>;
+  approveJob: (id: string) => Promise<boolean>;
+  rejectJob: (id: string) => Promise<boolean>;
+  saveJob: (id: string) => Promise<boolean>;
+  addTestimonial: (jobId: string, testimonial: Omit<JobTestimonial, 'id' | 'timestamp'>) => void;
+  deleteTestimonial: (jobId: string, testimonialId: string) => void;
+  approveApplication: (jobId: string, applicantId: string) => Promise<boolean>;
+  rejectApplication: (jobId: string, applicantId: string) => Promise<boolean>;
+  updateApplicationStatus?: (applicationId: string, status: 'approved' | 'rejected') => Promise<boolean>;
+  fetchJobApplications?: (jobId: string) => Promise<Application[]>;
+  fetchAndSetJobApplications?: (jobId: string) => Promise<void>;
+  withdrawApplication?: (applicationId: string) => Promise<boolean>;
+  getApplicationId?: (jobId: string, applicantId: string) => string | null;
+  addEvent: (event: Omit<Event, 'id' | 'registered'>) => Promise<boolean>;
   toggleRegisterEvent: (id: string) => void;
   cancelEvent: (eventId: string) => void;
-  sendMessage: (chatId: string, content: string) => void;
-  acceptMessageRequest: (id: string) => void;
-  rejectMessageRequest: (id: string) => void;
-  updateProfile: (profile: Partial<UserProfile>) => void;
+  reopenEvent?: (eventId: string) => Promise<boolean>;
+  sendMessage: (chatId: string, content: string) => Promise<void>;
+  acceptMessageRequest: (id: string) => Promise<void>;
+  rejectMessageRequest: (id: string) => Promise<void>;
+  updateProfile: (profile: Partial<UserProfile>) => Promise<void>;
   addPost: (content: string, communityId?: string) => Promise<boolean>;
   toggleLikePost: (id: string) => Promise<boolean>;
   addComment: (postId: string, content: string) => Promise<boolean>;
-  createCommunity: (name: string, description: string) => void;
+  deletePost?: (postId: string) => Promise<boolean>;
+  updatePost?: (postId: string, content: string) => Promise<boolean>;
+  createCommunity: (name: string, description: string) => Promise<void>;
   joinCommunity: (communityId: string) => Promise<boolean>;
   leaveCommunity: (communityId: string) => Promise<boolean>;
   getCommunityMembers: (communityId: string) => Promise<CommunityMember[]>;
+  loading?: {
+    savingJob?: boolean;
+    sendingMessage?: boolean;
+    approvingApplication?: boolean;
+    rejectingApplication?: boolean;
+    approvingJob?: boolean;
+    rejectingJob?: boolean;
+  };
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -227,6 +272,19 @@ const deriveEventCategory = (event: any): Event['category'] => {
   return 'Social';
 };
 
+const normalizeJobStatus = (status: string): Job['status'] => {
+  if (status === 'open' || status === 'approved') return 'approved';
+  if (status === 'pending' || status === 'pending_vote') return 'pending';
+  if (status === 'closed') return 'closed';
+  return 'rejected';
+};
+
+const normalizeEventStatus = (status: string): Event['status'] => {
+  if (status === 'active' || status === 'approved') return 'approved';
+  if (status === 'pending' || status === 'pending_vote') return 'pending';
+  return 'cancelled';
+};
+
 const transformJob = (job: any): Job => ({
   id: toId(job.jobID),
   title: job.title,
@@ -238,9 +296,11 @@ const transformJob = (job: any): Job => ({
   description: job.description,
   applied: false,
   communityId: job.boardID ? toId(job.boardID) : undefined,
-  status: job.status === 'open' ? 'approved' : 'pending',
+  status: normalizeJobStatus(String(job.status || 'open')),
   applicants: [],
   postedBy: job.alumniID ? toId(job.alumniID) : 'admin',
+  saved: Boolean(job.saved),
+  testimonials: job.testimonials || [],
 });
 
 
@@ -284,6 +344,11 @@ const transformEvent = (event: any): Event => ({
   registered: false,
   communityId: event.boardID ? toId(event.boardID) : undefined,
   creatorId: event.alumniID ? toId(event.alumniID) : undefined,
+  status: normalizeEventStatus(String(event.status || 'active')),
+  description: event.description || '',
+  faculty: event.faculty || 'General',
+  department: event.department || 'All Departments',
+  hostClub: event.hostClub || 'UWI Alumni Association',
 });
 
 const emptyProfile: UserProfile = {
@@ -296,6 +361,15 @@ const emptyProfile: UserProfile = {
   isPrivate: false,
 };
 
+type LoadingState = {
+  savingJob?: boolean;
+  sendingMessage?: boolean;
+  approvingApplication?: boolean;
+  rejectingApplication?: boolean;
+  approvingJob?: boolean;
+  rejectingJob?: boolean;
+};
+
 export function DataProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -306,9 +380,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [alumni, setAlumni] = useState<Alumni[]>([]);
   const [communities, setCommunities] = useState<Community[]>([]);
+  const [loading, setLoading] = useState<LoadingState>({});
 
   const fetchJobs = async () => {
-    const res = await fetch(`${API_BASE}/jobs/list/all`, { headers: authHeaders() });
+    const res = await fetch(`${API_BASE}/jobs/list?limit=500`, { headers: authHeaders() });
     if (!res.ok) {
       setJobs([]);
       return;
@@ -322,25 +397,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!res.ok) return;
 
     const data = await res.json();
-    const appliedIds = new Set<string>((data.jobIDs || []).map((jobId: string) => toId(jobId)));
-    const statusByJobId = new Map<string, string>(
-      (data.applications || []).map((application: any) => [toId(application.jobID), String(application.status || 'pending')]),
-    );
+    const apps = data.applications || [];
+    const appliedIds = new Set<string>(apps.map((a: any) => toId(a.jobID)));
+    const statusByJobId = new Map<string, string>(apps.map((application: any) => [toId(application.jobID), String(application.status || 'pending')]));
 
     setJobs((prev) =>
       prev.map((job) => {
         const applied = appliedIds.has(toId(job.id));
         const rawStatus = statusByJobId.get(toId(job.id));
-        const applicationStatus =
-          rawStatus === 'approved' || rawStatus === 'rejected' ? rawStatus : applied ? 'pending' : undefined;
+        const applicationStatus = rawStatus === 'approved' || rawStatus === 'rejected' ? rawStatus : applied ? 'pending' : undefined;
         return { ...job, applied, applicationStatus };
       }),
     );
   };
 
   const fetchEvents = async () => {
-    const res = await fetch(`${API_BASE}/events/list/all`, { headers: authHeaders() });
-    if (!res.ok) {
+    const res = await fetch(`${API_BASE}/events/list?limit=500`, { headers: authHeaders() });    if (!res.ok) {
       setEvents([]);
       return;
     }
@@ -358,30 +430,49 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const fetchMessages = async () => {
-    const res = await fetch(`${API_BASE}/messages/inbox`, { headers: authHeaders() });
-    if (!res.ok) {
+    const [inboxRes, sentRes] = await Promise.all([
+      fetch(`${API_BASE}/messages/inbox`, { headers: authHeaders() }),
+      fetch(`${API_BASE}/messages/sent`, { headers: authHeaders() }),
+    ]);
+    if (!inboxRes.ok && !sentRes.ok) {
       setMessages([]);
       return;
     }
-    const data = await res.json();
-    const transformed = (data.messages || []).map((message: any) => ({
-      id: toId(message.messageID),
-      senderId: toId(message.senderID),
-      receiverId: toId(message.receiverID),
-      sender: message.senderName || toId(message.senderID),
-      content: message.content,
-      time: new Date(message.timestamp).toLocaleTimeString(),
-      status: normalizeMessageStatus(message.status),
-      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(message.senderName || 'User')}&background=random`,
-      online: false,
-      preview: message.content,
-      unread: message.status === 'requested' || message.status === 'sent' || message.status === 'unread',
-    }));
+    const inboxData = inboxRes.ok ? await inboxRes.json().catch(() => ({})) : {};
+    const sentData = sentRes.ok ? await sentRes.json().catch(() => ({})) : {};
+    const merged = [...(inboxData.messages || []), ...(sentData.messages || [])];
+    const seen = new Set<string>();
+    const transformed = merged
+      .filter((message: any) => {
+        const id = toId(message.messageID);
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      })
+      .map((message: any) => {
+        const isMine = toId(message.senderID) === toId(user?.id);
+        const counterpartName = isMine ? (message.receiverName || toId(message.receiverID)) : (message.senderName || toId(message.senderID));
+        return {
+          id: toId(message.messageID),
+          senderId: toId(message.senderID),
+          receiverId: toId(message.receiverID),
+          sender: counterpartName,
+          content: message.content,
+          time: new Date(message.timestamp).toLocaleTimeString(),
+          rawTimestamp: message.timestamp,
+          status: normalizeMessageStatus(message.status),
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(counterpartName || 'User')}&background=random`,
+          online: false,
+          preview: message.content,
+          unread: !isMine && (message.status === 'requested' || message.status === 'sent' || message.status === 'unread'),
+        };
+      })
+      .sort((a, b) => new Date(b.rawTimestamp || b.time).getTime() - new Date(a.rawTimestamp || a.time).getTime());
     setMessages(transformed);
   };
 
   const fetchMessageRequests = async () => {
-    const res = await fetch(`${API_BASE}/messages/inbox`, { headers: authHeaders() });
+    const res = await fetch(`${API_BASE}/messages/requests`, { headers: authHeaders() });
     if (!res.ok) {
       setMessageRequests([]);
       return;
@@ -406,6 +497,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // check localStorage so the chosen cover survives a full reload.
     const storedCover = typeof localStorage !== 'undefined' ? localStorage.getItem('coverImage') : null;
     const existingCover = userProfile?.coverImage || storedCover || DEFAULT_COVER;
+    const existingPrivacy = userProfile?.isPrivate || false;
+    const storedSkills = typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('skills') || '[]') : [];
+    const storedExperience = typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('experience') || '[]') : [];
 
     if (!res.ok) {
       if (user) {
@@ -418,6 +512,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             user.avatar ||
             `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=0D8ABC&color=fff`,
           coverImage: existingCover,
+          isPrivate: existingPrivacy,
+          skills: storedSkills,
+          experience: storedExperience,
         });
       }
       return;
@@ -430,6 +527,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       role: data.user.role,
       avatar: data.profile.profilePicture || `https://ui-avatars.com/api/?name=${data.user.name}&background=0D8ABC&color=fff`,
       coverImage: data.profile.coverPhoto || existingCover,
+      isPrivate: String(data.profile.profileVisibility || 'public').toLowerCase() === 'private',
+      skills: storedSkills,
+      experience: storedExperience,
     });
   };
 
@@ -448,7 +548,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       avatar: `https://ui-avatars.com/api/?name=${record.name}&background=random`,
       degree: record.degree || '',
       year: record.graduationYear?.toString() || '',
-      location: '',
+      location: record.location || '',
     }));
     setAlumni(transformed);
   };
@@ -473,7 +573,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const fetchPosts = async () => {
-    const res = await fetch(`${API_BASE}/boards/posts/all`, { headers: authHeaders() });
+    const res = await fetch(`${API_BASE}/boardposts/all`, { headers: authHeaders() });
     if (!res.ok) {
       setPosts([]);
       return;
@@ -487,6 +587,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       content: post.content,
       time: new Date(post.postedDate).toLocaleString(),
       likes: Number(post.likesCount || 0),
+      likedBy: (post.likedBy || []).map((value: unknown) => toId(value)),
       commentsCount: Number(post.commentsCount || 0),
       comments: (post.comments || []).map((comment: any) => ({
         id: toId(comment.commentID),
@@ -497,7 +598,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         content: comment.content || '',
         time: comment.time ? new Date(comment.time).toLocaleString() : '',
       })),
-      liked: Boolean(post.likedBy?.includes?.(toId(user?.id))),
+      liked: Boolean((post.likedBy || []).map((value: unknown) => toId(value)).includes(toId(user?.id))),
       communityId: toId(post.boardID),
     }));
     setPosts(transformed);
@@ -525,62 +626,63 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     fetchAll();
 
-    const intervalId = window.setInterval(() => {
-      fetchAll();
-    }, 15000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
   }, [user?.id]);
 
-  const addJob = async (job: Omit<Job, 'id' | 'applied' | 'status' | 'applicants'>) => {
+  const addJob = async (job: Omit<Job, 'id' | 'applied' | 'status' | 'applicants'>): Promise<boolean> => {
     const boardID = job.communityId || communities[0]?.id;
-    if (!boardID) return;
+    if (!boardID) return false;
+    const useBoardPollEndpoint = Boolean(job.communityId);
+    const endpoint = useBoardPollEndpoint ? `${API_BASE}/boards/${toId(boardID)}/jobs` : `${API_BASE}/jobs`;
 
-    const response = await fetch(`${API_BASE}/jobs`, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
-        boardID: toId(boardID),
         title: job.title,
         company: job.company,
         description: `[${job.type}] ${job.description}`,
         salaryRange: job.salary,
         location: job.location,
         expiryDate: '2026-12-31',
+        ...(useBoardPollEndpoint ? {} : { boardID: toId(boardID) }),
       }),
     });
-    if (response.ok) fetchJobs();
+    if (!response.ok) return false;
+    await fetchJobs();
+    return true;
   };
 
-  const submitJobApplication = async (jobId: string, application: Omit<Application, 'id' | 'date'>) => {
-    const payload = { coverLetter: application.coverLetter };
-    let response = await fetch(`${API_BASE}/jobs/${jobId}/apply`, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload),
-    });
+  const submitJobApplication = async (jobId: string, application: Omit<Application, 'id' | 'date' | 'status'>) => {
+    try {
+      const payload: any = {
+        jobID: toId(jobId),
+        coverLetter: application.coverLetter,
+      };
+      if ((application as any).resumeUrl) payload.resumeUrl = (application as any).resumeUrl;
+      if ((application as any).applicantName) payload.applicantName = (application as any).applicantName;
 
-    if (response.status === 404) {
-      response = await fetch(`${API_BASE}/alumni/jobs/${jobId}/apply`, {
+      const response = await fetch(`${API_BASE}/applications`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload),
       });
-    }
 
-    if (response.ok) {
-      setJobs((prev) =>
-        prev.map((job) => (toId(job.id) === toId(jobId) ? { ...job, applied: true, applicationStatus: 'pending' } : job)),
-      );
-      fetchAppliedJobs();
+      if (response.ok) {
+        setJobs((prev) =>
+          prev.map((job) => (toId(job.id) === toId(jobId) ? { ...job, applied: true, applicationStatus: 'pending' } : job)),
+        );
+        await fetchAppliedJobs();
+      }
+    } catch (err) {
+      // silent failure; caller shows toast
     }
   };
 
-  const addEvent = async (event: Omit<Event, 'id' | 'registered'>) => {
+  const addEvent = async (event: Omit<Event, 'id' | 'registered'>): Promise<boolean> => {
     const boardID = event.communityId || communities[0]?.id;
-    if (!boardID) return;
+    if (!boardID) return false;
+    const useBoardPollEndpoint = Boolean(event.communityId);
+    const endpoint = useBoardPollEndpoint ? `${API_BASE}/boards/${toId(boardID)}/events` : `${API_BASE}/events`;
 
     const normalizedDate = /^\d{4}-\d{2}-\d{2}$/.test(event.date)
       ? event.date
@@ -590,7 +692,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         })();
     const normalizedTime = to24HourTime(event.time);
 
-    const response = await fetch(`${API_BASE}/events`, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
@@ -600,13 +702,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         time: normalizedTime,
         location: event.location,
         maxAttendees: 100,
-        boardID: toId(boardID),
+        ...(useBoardPollEndpoint ? {} : { boardID: toId(boardID) }),
       }),
     });
-    if (response.ok) {
-      await fetchEvents();
-      await fetchRegisteredEvents();
-    }
+    if (!response.ok) return false;
+    await fetchEvents();
+    await fetchRegisteredEvents();
+    return true;
   };
 
   const toggleRegisterEvent = async (id: string) => {
@@ -615,7 +717,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!current) return;
 
     const endpoint = current.registered ? 'unregister-attendee' : 'register-attendee';
-    const response = await fetch(`${API_BASE}/events/${id}/${endpoint}`, {
+    const response = await fetch(`${API_BASE}/events/${id}/register`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ attendeeID: user.id }),
@@ -630,6 +732,33 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const fetchJobApplications = async (jobId: string): Promise<Application[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/jobs/${jobId}/applications`, { headers: authHeaders() });
+      if (!res.ok) return [];
+      const data = await res.json();
+      const apps = (data.applications || []).map((a: any) => ({
+        id: toId(a.applicationID || a.id || a.applicationId),
+        jobId: toId(a.jobID || a.jobId),
+        applicantId: toId(a.applicantID || a.applicantId || a.userID),
+        applicantName: a.applicantName || a.name || '',
+        resumeUrl: a.resumeUrl || a.resume || '',
+        coverLetter: a.coverLetter || a.cover_letter || '',
+        date: a.date || a.createdAt || a.timestamp || '',
+        status: (a.status || 'pending') as 'pending' | 'approved' | 'rejected',
+      }));
+      return apps;
+    } catch {
+      return [];
+    }
+  };
+
+  const fetchAndSetJobApplications = async (jobId: string) => {
+    const apps = await fetchJobApplications(jobId);
+    if (!apps.length) return;
+    setJobs((prev) => prev.map((job) => (toId(job.id) === toId(jobId) ? { ...job, applicants: apps } : job)));
+  };
+
   const cancelEvent = async (eventId: string) => {
     const response = await fetch(`${API_BASE}/events/${eventId}/cancel`, { method: 'POST', headers: authHeaders() });
     if (response.ok) {
@@ -637,13 +766,33 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const reopenEvent = async (eventId: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/events/${eventId}/manage`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ action: 'reopen' }),
+      });
+      if (!res.ok) return false;
+      await fetchEvents();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const sendMessage = async (chatId: string, content: string) => {
-    const response = await fetch(`${API_BASE}/messages`, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ receiverID: toId(chatId), content }),
-    });
-    if (response.ok) fetchMessages();
+    setLoading((prev) => ({ ...prev, sendingMessage: true }));
+    try {
+      const response = await fetch(`${API_BASE}/messages`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ receiverID: toId(chatId), content }),
+      });
+      if (response.ok) await fetchMessages();
+    } finally {
+      setLoading((prev) => ({ ...prev, sendingMessage: false }));
+    }
   };
 
   const acceptMessageRequest = async (id: string) => {
@@ -682,6 +831,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('coverImage', profile.coverImage);
         } catch {}
       }
+      if (profile.skills !== undefined && updated) {
+        try {
+          localStorage.setItem('skills', JSON.stringify(profile.skills));
+        } catch {}
+      }
+      if (profile.experience !== undefined && updated) {
+        try {
+          localStorage.setItem('experience', JSON.stringify(profile.experience));
+        } catch {}
+      }
       return updated;
     });
 
@@ -700,11 +859,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
 
     // bio updates go to profile endpoint
-    if (profile.bio !== undefined) {
+    if (profile.bio !== undefined || profile.isPrivate !== undefined) {
       await fetch(`${API_BASE}/profiles/me/bio`, {
         method: 'PATCH',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ bio: profile.bio }),
+        body: JSON.stringify({
+          ...(profile.bio !== undefined ? { bio: profile.bio } : {}),
+          ...(profile.isPrivate !== undefined ? { profileVisibility: profile.isPrivate ? 'private' : 'public' } : {}),
+        }),
       });
     }
 
@@ -750,63 +912,222 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setJobs((prev) => prev.map((job) => (toId(job.id) === toId(id) ? { ...job, applied: !job.applied } : job)));
   };
 
-  const approveJob = (id: string) => {
-    setJobs((prev) => prev.map((job) => (toId(job.id) === toId(id) ? { ...job, status: 'approved' } : job)));
+  const approveJob = async (id: string) => {
+    setLoading((prev) => ({ ...prev, approvingJob: true }));
+    try {
+      const res = await fetch(`${API_BASE}/admin/moderate`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ type: 'job', id: toId(id), action: 'approve' }),
+      });
+      if (res.ok) {
+        setJobs((prev) => prev.map((job) => (toId(job.id) === toId(id) ? { ...job, status: 'approved' } : job)));
+        return true;
+      }
+      return false;
+    } finally {
+      setLoading((prev) => ({ ...prev, approvingJob: false }));
+    }
   };
 
-  const rejectJob = (id: string) => {
-    setJobs((prev) => prev.map((job) => (toId(job.id) === toId(id) ? { ...job, status: 'rejected' } : job)));
+  const rejectJob = async (id: string) => {
+    setLoading((prev) => ({ ...prev, rejectingJob: true }));
+    try {
+      const res = await fetch(`${API_BASE}/admin/moderate`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ type: 'job', id: toId(id), action: 'reject' }),
+      });
+      if (res.ok) {
+        setJobs((prev) => prev.map((job) => (toId(job.id) === toId(id) ? { ...job, status: 'rejected' } : job)));
+        return true;
+      }
+      return false;
+    } finally {
+      setLoading((prev) => ({ ...prev, rejectingJob: false }));
+    }
   };
 
-  const approveApplication = (jobId: string, applicantId: string) => {
-    setJobs((prev) =>
-      prev.map((job) => {
-        if (toId(job.id) !== toId(jobId) || !job.applicants) return job;
-        return {
-          ...job,
-          applicants: job.applicants.map((application) =>
-            toId(application.applicantId) === toId(applicantId)
-              ? { ...application, status: 'approved' }
-              : application,
-          ),
+  const saveJob = async (id: string) => {
+    setLoading((prev) => ({ ...prev, savingJob: true }));
+    try {
+      const res = await fetch(`${API_BASE}/jobs/${id}/save`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+      });
+      if (!res.ok) return false;
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {}
+      const serverSaved = data.saved;
+      setJobs((prev) =>
+        prev.map((job) =>
+          toId(job.id) === toId(id) ? { ...job, saved: serverSaved !== undefined ? Boolean(serverSaved) : !job.saved } : job,
+        ),
+      );
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setLoading((prev) => ({ ...prev, savingJob: false }));
+    }
+  };
+
+  const addTestimonial = (jobId: string, testimonial: Omit<JobTestimonial, 'id' | 'timestamp'>) => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/jobs/${jobId}/testimonials`, {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ name: testimonial.name, avatar: testimonial.avatar, stars: testimonial.stars, comment: testimonial.comment }),
+        });
+        if (!res.ok) {
+          // fallback to local only
+          setJobs((prev) => prev.map((job) => {
+            if (toId(job.id) !== toId(jobId)) return job;
+            const newTestimonial: JobTestimonial = {
+              ...testimonial,
+              id: Math.random().toString(36).substring(2, 9),
+              timestamp: new Date().toISOString(),
+            };
+            return { ...job, testimonials: [newTestimonial, ...(job.testimonials || [])] };
+          }));
+          return;
+        }
+        const data = await res.json();
+        const created = data.testimonial || data.created || data;
+        const newTestimonial: JobTestimonial = {
+          id: toId(created.testimonialID || created.id || created.testimonialId || Math.random().toString(36).substring(2, 9)),
+          name: created.name || testimonial.name,
+          avatar: created.avatar || testimonial.avatar,
+          stars: Number(created.stars || testimonial.stars),
+          comment: created.comment || testimonial.comment,
+          timestamp: created.timestamp || new Date().toISOString(),
         };
-      }),
-    );
+        setJobs((prev) => prev.map((job) => (toId(job.id) === toId(jobId) ? { ...job, testimonials: [newTestimonial, ...(job.testimonials || [])] } : job)));
+      } catch {
+        setJobs((prev) => prev.map((job) => {
+          if (toId(job.id) !== toId(jobId)) return job;
+          const newTestimonial: JobTestimonial = {
+            ...testimonial,
+            id: Math.random().toString(36).substring(2, 9),
+            timestamp: new Date().toISOString(),
+          };
+          return { ...job, testimonials: [newTestimonial, ...(job.testimonials || [])] };
+        }));
+      }
+    })();
   };
 
-  const rejectApplication = (jobId: string, applicantId: string) => {
-    setJobs((prev) =>
-      prev.map((job) => {
-        if (toId(job.id) !== toId(jobId) || !job.applicants) return job;
-        return {
+  const deleteTestimonial = (jobId: string, testimonialId: string) => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/jobs/${jobId}/testimonials/${testimonialId}`, {
+          method: 'DELETE',
+          headers: authHeaders(),
+        });
+        if (res.ok) {
+          setJobs((prev) => prev.map((job) => {
+            if (toId(job.id) !== toId(jobId)) return job;
+            return { ...job, testimonials: (job.testimonials || []).filter(t => t.id !== testimonialId) };
+          }));
+        }
+      } catch {
+        // fallback local removal
+        setJobs((prev) => prev.map((job) => {
+          if (toId(job.id) !== toId(jobId)) return job;
+          return { ...job, testimonials: (job.testimonials || []).filter(t => t.id !== testimonialId) };
+        }));
+      }
+    })();
+  };
+
+  const findApplicationId = (jobId: string, applicantId: string): string | null => {
+    const job = jobs.find((j) => toId(j.id) === toId(jobId));
+    if (!job || !job.applicants) return null;
+    const app = job.applicants.find((a) => toId(a.applicantId) === toId(applicantId));
+    return app ? toId(app.id) : null;
+  };
+
+  const updateApplicationStatus = async (applicationId: string, status: 'approved' | 'rejected'): Promise<boolean> => {
+    setLoading((prev) => ({ ...prev, approvingApplication: status === 'approved', rejectingApplication: status === 'rejected' }));
+    try {
+      const res = await fetch(`${API_BASE}/applications/${applicationId}/status`, {
+        method: 'PATCH',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) return false;
+      setJobs((prev) =>
+        prev.map((job) => ({
           ...job,
-          applicants: job.applicants.map((application) =>
-            toId(application.applicantId) === toId(applicantId)
-              ? { ...application, status: 'rejected' }
-              : application,
-          ),
-        };
-      }),
-    );
+          applicants: job.applicants ? job.applicants.map((app) => (toId(app.id) === toId(applicationId) ? { ...app, status } : app)) : job.applicants,
+        })),
+      );
+      return true;
+    } finally {
+      setLoading((prev) => ({ ...prev, approvingApplication: false, rejectingApplication: false }));
+    }
+  };
+  const approveApplication = async (jobId: string, applicantId: string): Promise<boolean> => {
+    const applicationId = findApplicationId(jobId, applicantId);
+    if (!applicationId) {
+      // fallback to local update
+      setJobs((prev) =>
+        prev.map((job) => {
+          if (toId(job.id) !== toId(jobId) || !job.applicants) return job;
+          return {
+            ...job,
+            applicants: job.applicants.map((application) =>
+              toId(application.applicantId) === toId(applicantId) ? { ...application, status: 'approved' } : application,
+            ),
+          };
+        }),
+      );
+      return true;
+    }
+    return await updateApplicationStatus(applicationId, 'approved');
+  };
+
+  const rejectApplication = async (jobId: string, applicantId: string): Promise<boolean> => {
+    const applicationId = findApplicationId(jobId, applicantId);
+    if (!applicationId) {
+      // fallback to local update
+      setJobs((prev) =>
+        prev.map((job) => {
+          if (toId(job.id) !== toId(jobId) || !job.applicants) return job;
+          return {
+            ...job,
+            applicants: job.applicants.map((application) =>
+              toId(application.applicantId) === toId(applicantId) ? { ...application, status: 'rejected' } : application,
+            ),
+          };
+        }),
+      );
+      return true;
+    }
+    return await updateApplicationStatus(applicationId, 'rejected');
   };
 
   const addPost = async (content: string, communityId?: string): Promise<boolean> => {
-    if (!communityId) return false;
+    const targetCommunityId = communityId || communities[0]?.id;
+    if (!targetCommunityId) return false;
     const authorName = userProfile?.name || user?.name || 'User';
     const avatar =
       userProfile?.avatar ||
       `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&background=0D8ABC&color=fff`;
 
     try {
-      const response = await fetch(`${API_BASE}/boards/${communityId}/posts`, {
+      const response = await fetch(`${API_BASE}/boardposts`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ boardID: toId(targetCommunityId), content }),
       });
       if (!response.ok) return false;
 
       const data = await response.json();
-      const created = data.post;
+      const created = data.post || data.created || data;
       const post: Post = {
         id: toId(created.postID),
         author: created.authorName || authorName,
@@ -814,6 +1135,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         content: created.content,
         time: new Date(created.postedDate).toLocaleString(),
         likes: Number(created.likesCount || 0),
+        likedBy: (created.likedBy || []).map((value: unknown) => toId(value)),
         commentsCount: Number(created.commentsCount || 0),
         comments: (created.comments || []).map((comment: any) => ({
           id: toId(comment.commentID),
@@ -834,9 +1156,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const deletePost = async (postId: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE}/boardposts/${postId}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      if (!res.ok) return false;
+      setPosts((prev) => prev.filter((p) => toId(p.id) !== toId(postId)));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const updatePost = async (postId: string, content: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE}/boardposts/${postId}`, {
+        method: 'PATCH',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ content }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      const updated = data.post || data.updated || data;
+      setPosts((prev) => prev.map((p) => (toId(p.id) === toId(postId) ? { ...p, content: updated.content || content } : p)));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const toggleLikePost = async (id: string): Promise<boolean> => {
     try {
-      const response = await fetch(`${API_BASE}/boards/posts/${id}/like`, {
+      const response = await fetch(`${API_BASE}/boardposts/${id}/like`, {
         method: 'POST',
         headers: authHeaders(),
       });
@@ -850,6 +1203,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 ...post,
                 liked: Boolean(data.liked),
                 likes: Number(data.likesCount || 0),
+                likedBy: Array.isArray(data.likedBy)
+                  ? data.likedBy.map((value: unknown) => toId(value))
+                  : data.liked
+                    ? Array.from(new Set([...(post.likedBy || []), toId(user?.id)]))
+                    : (post.likedBy || []).filter((value) => toId(value) !== toId(user?.id)),
               }
             : post,
         ),
@@ -862,7 +1220,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const addComment = async (postId: string, content: string): Promise<boolean> => {
     try {
-      const response = await fetch(`${API_BASE}/boards/posts/${postId}/comments`, {
+      const response = await fetch(`${API_BASE}/boardposts/${postId}/comments`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ content }),
@@ -969,6 +1327,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     submitJobApplication,
     approveJob,
     rejectJob,
+    saveJob,
+    addTestimonial,
+    deleteTestimonial,
     approveApplication,
     rejectApplication,
     addEvent,
@@ -985,6 +1346,35 @@ export function DataProvider({ children }: { children: ReactNode }) {
     joinCommunity,
     leaveCommunity,
     getCommunityMembers,
+    updateApplicationStatus,
+    fetchJobApplications,
+    fetchAndSetJobApplications,
+    withdrawApplication: async (applicationId: string) => {
+      try {
+        // find job that contains this application
+        const jobContaining = jobs.find((j) => (j.applicants || []).some((a) => toId(a.id) === toId(applicationId)));
+        const res = await fetch(`${API_BASE}/applications/${applicationId}/withdraw`, {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+        });
+        if (!res.ok) return false;
+        // remove from local state
+        setJobs((prev) => prev.map((job) => {
+          if (!job.applicants) return job;
+          return toId(job.id) === toId(jobContaining?.id)
+            ? { ...job, applicants: job.applicants.filter((a) => toId(a.id) !== toId(applicationId)), applied: false }
+            : job;
+        }));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    getApplicationId: findApplicationId,
+    deletePost,
+    updatePost,
+    reopenEvent,
+    loading,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
