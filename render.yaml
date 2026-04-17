@@ -26,6 +26,8 @@ services:
         fromDatabase:
           name: alumni-db
           property: connectionString
+      - key: VITE_API_URL
+        value: ""
 
 databases:
   - name: alumni-db
