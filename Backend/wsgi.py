@@ -28,9 +28,14 @@ migrate = Migrate(app, db)
 # Auto‑initialize database on first deploy (e.g., Render)
 # ----------------------------------------------------------------------
 with app.app_context():
-    # Check if any users exist; if not, create tables and add sample data.
+    # First, create all tables if they don't exist
+    db.create_all()
+    
+    # Now check if any users exist; if not, add sample data
     if not User.query.first():
-        print("No users found. Initializing database with sample data...")
+        print("No users found. Adding sample data...")
+        # The default admin is already created by initialize_database, but we need
+        # to call it to set up the admin user. We pass create_default_admin=True.
         initialize_database(app, create_default_admin=True)
         add_sample_data(app)
         print("Database initialized and sample data added.")
