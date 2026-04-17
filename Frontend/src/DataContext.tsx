@@ -1,3 +1,5 @@
+// File: DataContext.tsx
+
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { getAuthToken, useAuth } from './AuthContext';
 import { API_BASE } from './apiConfig';
@@ -145,6 +147,7 @@ export interface Post {
   comments: Comment[];
   liked?: boolean;
   communityId?: string;
+  isAnnouncement?: boolean;
 }
 
 export interface Alumni {
@@ -156,6 +159,12 @@ export interface Alumni {
   degree: string;
   year: string;
   location: string;
+  isPublicProfile: boolean;
+}
+
+export interface Announcement extends Post {
+  isAnnouncement: true;
+  sentAsMessage: boolean;
 }
 
 interface DataContextType {
@@ -167,6 +176,7 @@ interface DataContextType {
   posts: Post[];
   alumni: Alumni[];
   communities: Community[];
+  announcements: Announcement[];
   stats: {
     alumniCount: number;
     unreadCount: number;
@@ -206,6 +216,10 @@ interface DataContextType {
   joinCommunity: (communityId: string) => Promise<boolean>;
   leaveCommunity: (communityId: string) => Promise<boolean>;
   getCommunityMembers: (communityId: string) => Promise<CommunityMember[]>;
+  addAnnouncement: (content: string, adminName: string, adminAvatar: string) => Promise<void>;
+  reportUser: (reportedUserId: string, reportedUserName: string, reason: string, details?: string) => Promise<void>;
+  suspendUser: (userId: string, reason: string, durationDays: number) => Promise<boolean>;
+  banUser: (userId: string, reason: string) => Promise<boolean>;
   loading?: {
     savingJob?: boolean;
     sendingMessage?: boolean;
@@ -303,11 +317,6 @@ const transformJob = (job: any): Job => ({
   testimonials: job.testimonials || [],
 });
 
-
-// helper that produces a simple inline SVG as a data URI. this keeps the
-// app completely self‑contained (no external network requests) and still
-// gives every event a visually distinct cover based on its title and
-// category. colors are chosen per category for variety.
 const generateEventImage = (event: any): string => {
   const title = (event.title || event.category || 'Event').replace(/&/g, '&amp;');
   const category = event.category || 'Other';
@@ -325,10 +334,7 @@ const generateEventImage = (event: any): string => {
     ${title}
   </text>
 </svg>`;
-  // encode as percent‑escaped URI component to avoid base64 complexity
-  const encoded = encodeURIComponent(svg)
-    .replace(/'/g, '%27')
-    .replace(/"/g, '%22');
+  const encoded = encodeURIComponent(svg).replace(/'/g, '%27').replace(/"/g, '%22');
   return `data:image/svg+xml;charset=UTF-8,${encoded}`;
 };
 
@@ -339,7 +345,6 @@ const transformEvent = (event: any): Event => ({
   time: event.time12 || formatTo12Hour(event.time),
   location: event.location,
   category: deriveEventCategory(event),
-  // generate the cover image dynamically instead of hard‑coding one URL
   image: generateEventImage(event),
   registered: false,
   communityId: event.boardID ? toId(event.boardID) : undefined,
@@ -380,7 +385,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [alumni, setAlumni] = useState<Alumni[]>([]);
   const [communities, setCommunities] = useState<Community[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState<LoadingState>({});
+
+  const getAdminId = () => {
+    const admin = alumni.find(a => a.role === 'admin');
+    return admin?.id || 'admin-system';
+  };
+
+  const sendSystemMessage = async (receiverId: string, content: string) => {
+    try {
+      await fetch(`${API_BASE}/messages`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ receiverID: toId(receiverId), content: `📢 ${content}` }),
+      });
+      setTimeout(() => fetchMessages(), 500);
+    } catch {
+      // Ignore errors
+    }
+  };
 
   const fetchJobs = async () => {
     const res = await fetch(`${API_BASE}/jobs/list?limit=500`, { headers: authHeaders() });
@@ -395,12 +419,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const fetchAppliedJobs = async () => {
     const res = await fetch(`${API_BASE}/jobs/applied/me`, { headers: authHeaders() });
     if (!res.ok) return;
-
     const data = await res.json();
     const apps = data.applications || [];
     const appliedIds = new Set<string>(apps.map((a: any) => toId(a.jobID)));
     const statusByJobId = new Map<string, string>(apps.map((application: any) => [toId(application.jobID), String(application.status || 'pending')]));
-
     setJobs((prev) =>
       prev.map((job) => {
         const applied = appliedIds.has(toId(job.id));
@@ -412,7 +434,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const fetchEvents = async () => {
-    const res = await fetch(`${API_BASE}/events/list?limit=500`, { headers: authHeaders() });    if (!res.ok) {
+    const res = await fetch(`${API_BASE}/events/list?limit=500`, { headers: authHeaders() });
+    if (!res.ok) {
       setEvents([]);
       return;
     }
@@ -423,7 +446,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const fetchRegisteredEvents = async () => {
     const res = await fetch(`${API_BASE}/events/registrations/me`, { headers: authHeaders() });
     if (!res.ok) return;
-
     const data = await res.json();
     const registeredIds = new Set<string>((data.eventIDs || []).map((eventId: string) => toId(eventId)));
     setEvents((prev) => prev.map((event) => ({ ...event, registered: registeredIds.has(toId(event.id)) })));
@@ -490,11 +512,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setMessageRequests(requests);
   };
 
-  // local fallback cover (UWI logo) - import at top of file
   const fetchUserProfile = async () => {
     const res = await fetch(`${API_BASE}/profiles/me/data`, { headers: authHeaders() });
-    // keep whatever cover is already in state (perhaps user just changed it). also
-    // check localStorage so the chosen cover survives a full reload.
     const storedCover = typeof localStorage !== 'undefined' ? localStorage.getItem('coverImage') : null;
     const existingCover = userProfile?.coverImage || storedCover || DEFAULT_COVER;
     const existingPrivacy = userProfile?.isPrivate || false;
@@ -508,9 +527,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           email: user.email,
           bio: '',
           role: user.role,
-          avatar:
-            user.avatar ||
-            `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=0D8ABC&color=fff`,
+          avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=0D8ABC&color=fff`,
           coverImage: existingCover,
           isPrivate: existingPrivacy,
           skills: storedSkills,
@@ -549,6 +566,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       degree: record.degree || '',
       year: record.graduationYear?.toString() || '',
       location: record.location || '',
+      isPublicProfile: record.isPublicProfile ?? true,
     }));
     setAlumni(transformed);
   };
@@ -578,7 +596,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setPosts([]);
       return;
     }
-
     const data = await res.json();
     const transformed = (data.posts || []).map((post: any) => ({
       id: toId(post.postID),
@@ -592,17 +609,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
       comments: (post.comments || []).map((comment: any) => ({
         id: toId(comment.commentID),
         author: comment.authorName || 'Unknown User',
-        avatar:
-          comment.avatar ||
-          `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.authorName || 'User')}&background=random`,
+        avatar: comment.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.authorName || 'User')}&background=random`,
         content: comment.content || '',
         time: comment.time ? new Date(comment.time).toLocaleString() : '',
       })),
       liked: Boolean((post.likedBy || []).map((value: unknown) => toId(value)).includes(toId(user?.id))),
       communityId: toId(post.boardID),
+      isAnnouncement: false,
     }));
     setPosts(transformed);
   };
+
+  const allPosts = [...announcements, ...posts].sort((a, b) => {
+    const timeA = a.isAnnouncement ? new Date().getTime() : new Date(a.time).getTime();
+    const timeB = b.isAnnouncement ? new Date().getTime() : new Date(b.time).getTime();
+    return timeB - timeA;
+  });
 
   useEffect(() => {
     if (!user) return;
@@ -623,9 +645,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         console.error('Failed to fetch data', error);
       }
     };
-
     fetchAll();
-
   }, [user?.id]);
 
   const addJob = async (job: Omit<Job, 'id' | 'applied' | 'status' | 'applicants'>): Promise<boolean> => {
@@ -649,6 +669,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
     if (!response.ok) return false;
     await fetchJobs();
+    if (user) {
+      sendSystemMessage(user.id, `Your job posting "${job.title}" has been submitted and is pending admin approval.`);
+    }
     return true;
   };
 
@@ -657,9 +680,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const payload: any = {
         jobID: toId(jobId),
         coverLetter: application.coverLetter,
+        resumeUrl: application.resumeUrl,
       };
-      if ((application as any).resumeUrl) payload.resumeUrl = (application as any).resumeUrl;
-      if ((application as any).applicantName) payload.applicantName = (application as any).applicantName;
+      if (application.applicantName) payload.applicantName = application.applicantName;
 
       const response = await fetch(`${API_BASE}/applications`, {
         method: 'POST',
@@ -668,10 +691,39 @@ export function DataProvider({ children }: { children: ReactNode }) {
       });
 
       if (response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const newApplication: Application = {
+          id: toId(data.application?.applicationID || data.applicationID || `app-${Date.now()}`),
+          jobId: toId(jobId),
+          applicantId: user?.id || 'current-user',
+          applicantName: application.applicantName,
+          resumeUrl: application.resumeUrl,
+          coverLetter: application.coverLetter,
+          date: new Date().toLocaleDateString(),
+          status: 'pending',
+        };
+
         setJobs((prev) =>
-          prev.map((job) => (toId(job.id) === toId(jobId) ? { ...job, applied: true, applicationStatus: 'pending' } : job)),
+          prev.map((job) => {
+            if (toId(job.id) === toId(jobId)) {
+              const existingApplicants = job.applicants || [];
+              return {
+                ...job,
+                applied: true,
+                applicationStatus: 'pending',
+                applicants: [...existingApplicants, newApplication],
+              };
+            }
+            return job;
+          }),
         );
         await fetchAppliedJobs();
+        // 🔥 Fetch latest applications for this job to sync admin view
+        await fetchAndSetJobApplications(jobId);
+        const jobTitle = jobs.find(j => toId(j.id) === toId(jobId))?.title || 'the position';
+        if (user) {
+          sendSystemMessage(user.id, `Your application for "${jobTitle}" has been submitted successfully.`);
+        }
       }
     } catch (err) {
       // silent failure; caller shows toast
@@ -708,6 +760,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!response.ok) return false;
     await fetchEvents();
     await fetchRegisteredEvents();
+    if (user) {
+      sendSystemMessage(user.id, `Your event "${event.title}" has been created successfully.`);
+    }
     return true;
   };
 
@@ -716,8 +771,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const current = events.find((event) => toId(event.id) === toId(id));
     if (!current) return;
 
-    const endpoint = current.registered ? 'unregister-attendee' : 'register-attendee';
-    const response = await fetch(`${API_BASE}/events/${id}/register`, {
+    const endpoint = current.registered ? 'unregister' : 'register';
+    const response = await fetch(`${API_BASE}/events/${id}/${endpoint}`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ attendeeID: user.id }),
@@ -729,6 +784,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
           toId(event.id) === toId(id) ? { ...event, registered: !current.registered } : event,
         ),
       );
+      if (!current.registered) {
+        sendSystemMessage(user.id, `You have successfully registered for "${current.title}".`);
+      }
     }
   };
 
@@ -820,31 +878,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const updateProfile = async (profile: Partial<UserProfile>) => {
-    // merge locally right away so the UI reflects changes even if network
-    // calls take a moment or fail. coverImage is client-only and not
-    // persisted to the API, but we save it in localStorage so it survives
-    // reloads.
     setUserProfile((prev) => {
       const updated = prev ? { ...prev, ...profile } : prev;
       if (profile.coverImage !== undefined && updated) {
-        try {
-          localStorage.setItem('coverImage', profile.coverImage);
-        } catch {}
+        try { localStorage.setItem('coverImage', profile.coverImage); } catch {}
       }
       if (profile.skills !== undefined && updated) {
-        try {
-          localStorage.setItem('skills', JSON.stringify(profile.skills));
-        } catch {}
+        try { localStorage.setItem('skills', JSON.stringify(profile.skills)); } catch {}
       }
       if (profile.experience !== undefined && updated) {
-        try {
-          localStorage.setItem('experience', JSON.stringify(profile.experience));
-        } catch {}
+        try { localStorage.setItem('experience', JSON.stringify(profile.experience)); } catch {}
       }
       return updated;
     });
 
-    // name/email updates go to /users/profile
     const userPayload: any = {};
     if (profile.name !== undefined) userPayload.name = profile.name;
     if (profile.email !== undefined) userPayload.email = profile.email;
@@ -855,10 +902,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(userPayload),
       });
-      // don't await fetchUserProfile here; we will refresh below once for all
     }
 
-    // bio updates go to profile endpoint
     if (profile.bio !== undefined || profile.isPrivate !== undefined) {
       await fetch(`${API_BASE}/profiles/me/bio`, {
         method: 'PATCH',
@@ -870,7 +915,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       });
     }
 
-    // avatar changes use the photo upload endpoint
     if (profile.avatar !== undefined) {
       await fetch(`${API_BASE}/profiles/me/photo`, {
         method: 'PATCH',
@@ -879,9 +923,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       });
     }
 
-    // coverImage isn't stored server-side, skip
-
-    // finally refresh from server to ensure consistency
     await fetchUserProfile();
   };
 
@@ -905,6 +946,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         },
         ...prev,
       ]);
+      if (user) {
+        sendSystemMessage(user.id, `You have successfully created the community "${name}".`);
+      }
     }
   };
 
@@ -922,6 +966,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       });
       if (res.ok) {
         setJobs((prev) => prev.map((job) => (toId(job.id) === toId(id) ? { ...job, status: 'approved' } : job)));
+        const job = jobs.find(j => toId(j.id) === toId(id));
+        if (job?.postedBy) {
+          sendSystemMessage(job.postedBy, `Your job posting "${job.title}" has been approved.`);
+        }
         return true;
       }
       return false;
@@ -957,9 +1005,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       });
       if (!res.ok) return false;
       let data: any = {};
-      try {
-        data = await res.json();
-      } catch {}
+      try { data = await res.json(); } catch {}
       const serverSaved = data.saved;
       setJobs((prev) =>
         prev.map((job) =>
@@ -983,7 +1029,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ name: testimonial.name, avatar: testimonial.avatar, stars: testimonial.stars, comment: testimonial.comment }),
         });
         if (!res.ok) {
-          // fallback to local only
           setJobs((prev) => prev.map((job) => {
             if (toId(job.id) !== toId(jobId)) return job;
             const newTestimonial: JobTestimonial = {
@@ -998,7 +1043,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const data = await res.json();
         const created = data.testimonial || data.created || data;
         const newTestimonial: JobTestimonial = {
-          id: toId(created.testimonialID || created.id || created.testimonialId || Math.random().toString(36).substring(2, 9)),
+          id: toId(created.testimonialID || created.id || Math.random().toString(36).substring(2, 9)),
           name: created.name || testimonial.name,
           avatar: created.avatar || testimonial.avatar,
           stars: Number(created.stars || testimonial.stars),
@@ -1034,7 +1079,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
           }));
         }
       } catch {
-        // fallback local removal
         setJobs((prev) => prev.map((job) => {
           if (toId(job.id) !== toId(jobId)) return job;
           return { ...job, testimonials: (job.testimonials || []).filter(t => t.id !== testimonialId) };
@@ -1070,10 +1114,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setLoading((prev) => ({ ...prev, approvingApplication: false, rejectingApplication: false }));
     }
   };
+
   const approveApplication = async (jobId: string, applicantId: string): Promise<boolean> => {
     const applicationId = findApplicationId(jobId, applicantId);
     if (!applicationId) {
-      // fallback to local update
       setJobs((prev) =>
         prev.map((job) => {
           if (toId(job.id) !== toId(jobId) || !job.applicants) return job;
@@ -1093,7 +1137,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const rejectApplication = async (jobId: string, applicantId: string): Promise<boolean> => {
     const applicationId = findApplicationId(jobId, applicantId);
     if (!applicationId) {
-      // fallback to local update
       setJobs((prev) =>
         prev.map((job) => {
           if (toId(job.id) !== toId(jobId) || !job.applicants) return job;
@@ -1114,9 +1157,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const targetCommunityId = communityId || communities[0]?.id;
     if (!targetCommunityId) return false;
     const authorName = userProfile?.name || user?.name || 'User';
-    const avatar =
-      userProfile?.avatar ||
-      `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&background=0D8ABC&color=fff`;
+    const avatar = userProfile?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&background=0D8ABC&color=fff`;
 
     try {
       const response = await fetch(`${API_BASE}/boardposts`, {
@@ -1140,14 +1181,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         comments: (created.comments || []).map((comment: any) => ({
           id: toId(comment.commentID),
           author: comment.authorName || 'Unknown User',
-          avatar:
-            comment.avatar ||
-            `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.authorName || 'User')}&background=random`,
+          avatar: comment.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.authorName || 'User')}&background=random`,
           content: comment.content || '',
           time: comment.time ? new Date(comment.time).toLocaleString() : '',
         })),
         liked: Boolean(created.liked),
         communityId: toId(created.boardID),
+        isAnnouncement: false,
       };
       setPosts((prev) => [post, ...prev]);
       return true;
@@ -1203,11 +1243,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 ...post,
                 liked: Boolean(data.liked),
                 likes: Number(data.likesCount || 0),
-                likedBy: Array.isArray(data.likedBy)
-                  ? data.likedBy.map((value: unknown) => toId(value))
-                  : data.liked
-                    ? Array.from(new Set([...(post.likedBy || []), toId(user?.id)]))
-                    : (post.likedBy || []).filter((value) => toId(value) !== toId(user?.id)),
+                likedBy: Array.isArray(data.likedBy) ? data.likedBy.map((v: any) => toId(v)) : data.liked ? [...(post.likedBy || []), toId(user?.id)] : (post.likedBy || []).filter((v) => toId(v) !== toId(user?.id)),
               }
             : post,
         ),
@@ -1231,17 +1267,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const comments = (data.comments || []).map((comment: any) => ({
         id: toId(comment.commentID),
         author: comment.authorName || 'Unknown User',
-        avatar:
-          comment.avatar ||
-          `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.authorName || 'User')}&background=random`,
+        avatar: comment.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.authorName || 'User')}&background=random`,
         content: comment.content || '',
         time: comment.time ? new Date(comment.time).toLocaleString() : '',
       }));
       setPosts((prev) =>
         prev.map((post) =>
-          toId(post.id) === toId(postId)
-            ? { ...post, comments, commentsCount: Number(data.commentsCount || comments.length) }
-            : post,
+          toId(post.id) === toId(postId) ? { ...post, comments, commentsCount: Number(data.commentsCount || comments.length) } : post,
         ),
       );
       return true;
@@ -1258,6 +1290,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       });
       if (response.ok) {
         await fetchCommunities();
+        if (user) {
+          const community = communities.find(c => c.id === communityId);
+          sendSystemMessage(user.id, `You have joined the community "${community?.name || communityId}".`);
+        }
         return true;
       }
       return false;
@@ -1284,9 +1320,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const getCommunityMembers = async (communityId: string): Promise<CommunityMember[]> => {
     try {
-      const response = await fetch(`${API_BASE}/boards/${communityId}/members`, {
-        headers: authHeaders(),
-      });
+      const response = await fetch(`${API_BASE}/boards/${communityId}/members`, { headers: authHeaders() });
       if (!response.ok) return [];
       const data = await response.json();
       return (data.members || []).map((member: any) => ({
@@ -1294,13 +1328,82 @@ export function DataProvider({ children }: { children: ReactNode }) {
         name: member.name || 'Unknown User',
         email: member.email || '',
         role: member.role || 'alumni',
-        avatar:
-          member.avatar ||
-          `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name || 'User')}&background=random`,
+        avatar: member.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name || 'User')}&background=random`,
         isAdmin: Boolean(member.isAdmin),
       }));
     } catch {
       return [];
+    }
+  };
+
+  const addAnnouncement = async (content: string, adminName: string, adminAvatar: string) => {
+    const newAnnouncement: Announcement = {
+      id: `announcement-${Date.now()}`,
+      author: adminName || 'UWI Admin',
+      avatar: adminAvatar || `https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff`,
+      content: `📢 ${content}`,
+      time: new Date().toLocaleString(),
+      likes: 0,
+      likedBy: [],
+      commentsCount: 0,
+      comments: [],
+      liked: false,
+      communityId: undefined,
+      isAnnouncement: true,
+      sentAsMessage: false,
+    };
+
+    setAnnouncements((prev) => [newAnnouncement, ...prev]);
+
+    const alumniList = alumni;
+    const messagePromises = alumniList.map(async (recipient) => {
+      try {
+        await fetch(`${API_BASE}/messages`, {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ receiverID: toId(recipient.id), content: `📢 Announcement: ${content}` }),
+        });
+      } catch {}
+    });
+
+    Promise.all(messagePromises).then(() => {
+      setAnnouncements((prev) =>
+        prev.map((a) => (a.id === newAnnouncement.id ? { ...a, sentAsMessage: true } : a))
+      );
+    });
+
+    setTimeout(() => fetchMessages(), 1000);
+  };
+
+  const reportUser = async (reportedUserId: string, reportedUserName: string, reason: string, details?: string) => {
+    const adminId = getAdminId();
+    const reportContent = `🚨 User Report\nReported: ${reportedUserName} (ID: ${reportedUserId})\nReason: ${reason}\n${details ? `Details: ${details}` : ''}\nReported by: ${user?.name}`;
+    await sendSystemMessage(adminId, reportContent);
+  };
+
+  const suspendUser = async (userId: string, reason: string, durationDays: number): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${userId}/suspend`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ reason, durationDays }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const banUser = async (userId: string, reason: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${userId}/ban`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ reason }),
+      });
+      return res.ok;
+    } catch {
+      return false;
     }
   };
 
@@ -1318,10 +1421,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     messages,
     messageRequests,
     userProfile: userProfile || emptyProfile,
-    posts,
+    posts: allPosts,
     stats,
     alumni,
     communities,
+    announcements,
     addJob,
     toggleApplyJob,
     submitJobApplication,
@@ -1351,14 +1455,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     fetchAndSetJobApplications,
     withdrawApplication: async (applicationId: string) => {
       try {
-        // find job that contains this application
         const jobContaining = jobs.find((j) => (j.applicants || []).some((a) => toId(a.id) === toId(applicationId)));
         const res = await fetch(`${API_BASE}/applications/${applicationId}/withdraw`, {
           method: 'POST',
           headers: authHeaders({ 'Content-Type': 'application/json' }),
         });
         if (!res.ok) return false;
-        // remove from local state
         setJobs((prev) => prev.map((job) => {
           if (!job.applicants) return job;
           return toId(job.id) === toId(jobContaining?.id)
@@ -1374,6 +1476,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     deletePost,
     updatePost,
     reopenEvent,
+    addAnnouncement,
+    reportUser,
+    suspendUser,
+    banUser,
     loading,
   };
 

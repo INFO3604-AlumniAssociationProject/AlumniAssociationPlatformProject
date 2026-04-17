@@ -1,3 +1,5 @@
+# File: UnitTests.py
+
 import sys
 import os
 import unittest
@@ -32,8 +34,9 @@ from App.Controllers import (
 LOGGER = logging.getLogger(__name__)
 
 
-class UserUnitTests(unittest.TestCase):
+class UserModelUnitTests(unittest.TestCase):
     """Tests for User model and its subclasses"""
+
     def setUp(self):
         self.app = create_app({'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:', 'TESTING': True})
         self.app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
@@ -109,7 +112,7 @@ class UserUnitTests(unittest.TestCase):
     def testEventModel(self):
         e = Event(
             alumniID="alum1", boardID="board1", title="Test Event",
-            description="Desc", date=date(2025,12,31), time=time(18,0),
+            description="Desc", date=date(2025, 12, 31), time=time(18, 0),
             location="Online", maxAttendees=50
         )
         self.assertEqual(e.title, "Test Event")
@@ -119,7 +122,7 @@ class UserUnitTests(unittest.TestCase):
     def testJobModel(self):
         j = Job(
             boardID="b1", alumniID="a1", title="Dev", company="Tech",
-            description="Code", expiryDate=date(2025,12,31)
+            description="Code", expiryDate=date(2025, 12, 31)
         )
         self.assertEqual(j.title, "Dev")
         self.assertEqual(j.status, "open")
@@ -681,7 +684,7 @@ class JobApplicationControllerUnitTests(unittest.TestCase):
         self.job = Job(
             boardID=self.board.boardID, alumniID=self.alum.userID,
             title="Test Job", company="Co", description="Desc",
-            expiryDate=date(2025,12,31), status="open"
+            expiryDate=date(2025, 12, 31), status="open"
         )
         db.session.add(self.job)
         db.session.commit()

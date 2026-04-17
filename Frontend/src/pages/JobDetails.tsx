@@ -1,9 +1,11 @@
+// File: JobDetails.tsx
+
 import React, { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { Briefcase, MapPin, DollarSign, Clock, ArrowLeft, Heart, Star, Upload, CheckCircle, X, MessageSquare, Share2 } from 'lucide-react';
+import { Briefcase, MapPin, DollarSign, Clock, ArrowLeft, Heart, Star, Upload, CheckCircle, X, Share2 } from 'lucide-react';
 import { useToast } from '../components/Toast';
 
 export default function JobDetails() {
@@ -90,7 +92,7 @@ export default function JobDetails() {
         <ArrowLeft size={16} /> Back to Jobs
       </button>
 
-      {/* Job Header Card - Fixed padding for buttons */}
+      {/* Job Header Card */}
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 relative">
         <div className="absolute top-6 right-6 flex gap-2 z-10">
           <button onClick={handleSaveJob} className="p-2 rounded-full hover:bg-slate-100 bg-white/80 backdrop-blur-sm shadow-sm">
@@ -116,7 +118,10 @@ export default function JobDetails() {
 
         <div className="flex flex-wrap gap-4 mb-6">
           <div className="flex items-center gap-2 text-sm font-medium text-slate-600 bg-slate-50 px-4 py-2 rounded-xl"><MapPin size={16} className="text-emerald-500" /> {job.location}</div>
-          <div className="flex items-center gap-2 text-sm font-medium text-slate-600 bg-slate-50 px-4 py-2 rounded-xl"><DollarSign size={16} className="text-emerald-500" /> {job.salary}</div>
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-600 bg-slate-50 px-4 py-2 rounded-xl">
+            <DollarSign size={16} className="text-emerald-500" /> 
+            <span className="font-medium text-emerald-700">{job.salary || 'Not specified'}</span>
+          </div>
           <div className="flex items-center gap-2 text-sm font-medium text-slate-600 bg-slate-50 px-4 py-2 rounded-xl"><Briefcase size={16} className="text-blue-500" /> {job.type}</div>
           <div className="flex items-center gap-2 text-sm font-medium text-slate-600 bg-slate-50 px-4 py-2 rounded-xl"><Clock size={16} className="text-orange-500" /> Posted {job.posted}</div>
         </div>

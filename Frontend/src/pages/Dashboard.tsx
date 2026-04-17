@@ -1,22 +1,21 @@
+// File: Dashboard.tsx
+
 import React, { useState } from 'react';
 import { useAuth } from '../AuthContext';
-import { useData, Post, Comment, Job, Event } from '../DataContext';
+import { useData, Post, Comment } from '../DataContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Calendar, Briefcase, MessageSquare, Users, Search, Plus, LogOut, Send, ThumbsUp, MoreHorizontal, X } from 'lucide-react';
+import { Calendar, Briefcase, MessageSquare, Users, Send, ThumbsUp, MoreHorizontal, X } from 'lucide-react';
 import { useToast } from '../components/Toast';
 
 export default function Dashboard() {
-  const { user, logout } = useAuth();
-  const { stats, events, jobs, alumni, posts, addPost, toggleLikePost, addComment } = useData();
+  const { user } = useAuth();
+  const { stats, events, jobs, alumni, posts, toggleLikePost, addComment } = useData();
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
   // Feed state
-  const [newPost, setNewPost] = useState('');
-  const [isPostFocused, setIsPostFocused] = useState(false);
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
   const [showLikers, setShowLikers] = useState<string | null>(null);
@@ -27,41 +26,6 @@ export default function Dashboard() {
     const timer = setTimeout(() => setIsLoading(false), 800);
     return () => clearTimeout(timer);
   }, []);
-
-  const handleLogout = () => {
-    showToast('Logged out successfully.', 'info');
-    logout();
-    navigate('/welcome');
-  };
-
-  const filteredAlumni = searchQuery 
-    ? alumni.filter(person => 
-        person.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        person.degree.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        person.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        person.company.toLowerCase().includes(searchQuery.toLowerCase())
-      ).slice(0, 5) // Limit to 5 results for the dropdown
-    : [];
-
-  const handleSearch = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      navigate(`/directory?search=${searchQuery}`);
-    }
-  };
-
-  const handlePost = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPost.trim()) return;
-    
-    const ok = await addPost(newPost);
-    if (ok) {
-      setNewPost('');
-      setIsPostFocused(false);
-      showToast('Post shared successfully!', 'success');
-    } else {
-      showToast('Failed to share post.', 'error');
-    }
-  };
 
   const handleComment = async (e: React.FormEvent, postId: string) => {
     e.preventDefault();
@@ -125,63 +89,11 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {/* Feed Section - Merged from Feed.tsx */}
+      {/* Feed Section */}
       <div className="space-y-6">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-xl font-bold text-slate-800 tracking-tight">Recent Activity</h2>
         </div>
-
-        {/* Create Post */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="ui-card rounded-3xl p-4 shadow-sm border border-slate-100/50 bg-white"
-        >
-          <form onSubmit={handlePost}>
-            <div className="flex gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center overflow-hidden flex-shrink-0 border border-slate-100">
-                <img src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name}&background=random`} alt={user?.name} className="w-full h-full object-cover" />
-              </div>
-              <div className="flex-1">
-                <textarea 
-                  value={newPost}
-                  onChange={(e) => setNewPost(e.target.value)}
-                  onFocus={() => setIsPostFocused(true)}
-                  placeholder="Share an update, ask a question, or start a discussion..."
-                  className={`w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-100 transition-all resize-none ${isPostFocused ? 'min-h-[100px]' : 'h-[44px]'}`}
-                />
-                
-                <AnimatePresence>
-                  {isPostFocused && (
-                    <motion.div 
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="flex justify-end mt-3 overflow-hidden"
-                    >
-                      <div className="flex gap-2">
-                        <button 
-                          type="button" 
-                          onClick={() => { setIsPostFocused(false); setNewPost(''); }}
-                          className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                        <button 
-                          type="submit"
-                          disabled={!newPost.trim()}
-                          className="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
-                        >
-                          <Send size={14} /> Post
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
-          </form>
-        </motion.div>
 
         {/* Posts List */}
         <div className="space-y-4">
@@ -211,7 +123,8 @@ export default function Dashboard() {
                 key={post.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="ui-card rounded-3xl p-5 shadow-sm border border-slate-100/50 bg-white"
+                className="ui-card rounded-3xl p-5 shadow-sm border border-slate-100/50 bg-white cursor-pointer"
+                onClick={() => navigate(`/boards/${post.communityId}`)}
               >
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center gap-3">
@@ -223,7 +136,7 @@ export default function Dashboard() {
                       <span className="text-[10px] text-slate-400 font-medium">{post.time}</span>
                     </div>
                   </div>
-                  <button className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-50 transition-colors">
+                  <button className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-50 transition-colors" onClick={(e) => e.stopPropagation()}>
                     <MoreHorizontal size={16} />
                   </button>
                 </div>
@@ -232,20 +145,20 @@ export default function Dashboard() {
                 
                 <div className="flex items-center gap-4 pt-3 border-t border-slate-100">
                   <button 
-                    onClick={() => toggleLikePost(post.id)}
+                    onClick={(e) => { e.stopPropagation(); toggleLikePost(post.id); }}
                     className={`flex items-center gap-1.5 text-xs font-bold transition-colors px-3 py-1.5 rounded-lg ${post.liked ? 'text-blue-600 bg-blue-50' : 'text-slate-500 hover:bg-slate-50'}`}
                   >
                     <ThumbsUp size={16} className={post.liked ? 'fill-blue-600' : ''} /> 
                     Like
                   </button>
                   <button
-                    onClick={() => setShowLikers(post.id)}
+                    onClick={(e) => { e.stopPropagation(); setShowLikers(post.id); }}
                     className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors"
                   >
                     {post.likes} likes
                   </button>
                   <button 
-                    onClick={() => setActiveCommentPostId(activeCommentPostId === post.id ? null : post.id)}
+                    onClick={(e) => { e.stopPropagation(); setActiveCommentPostId(activeCommentPostId === post.id ? null : post.id); }}
                     className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors"
                   >
                     <MessageSquare size={16} /> 
@@ -260,6 +173,7 @@ export default function Dashboard() {
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
                       className="mt-4 pt-4 border-t border-slate-100 overflow-hidden"
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <div className="space-y-3 mb-4">
                         {post.comments.map((comment: Comment) => (
@@ -351,62 +265,6 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="ui-card rounded-3xl p-6 shadow-sm border border-slate-100/50 bg-white/80 backdrop-blur-xl"
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold text-slate-800 text-lg">Search Alumni</h2>
-          <span className="text-xs font-medium text-slate-400">Connect & Message</span>
-        </div>
-        <div className="relative group">
-          <input 
-            type="text" 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={handleSearch}
-            placeholder="Search alumni by name, degree, or job..." 
-            className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-blue-100 text-sm transition-all group-hover:bg-white group-hover:shadow-md group-hover:ring-1 group-hover:ring-slate-100 placeholder:text-slate-400 font-medium"
-          />
-          <Search size={20} className="absolute left-4 top-3.5 text-slate-400 group-hover:text-blue-500 transition-colors" />
-          
-          {searchQuery && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-50">
-              {filteredAlumni.length > 0 ? (
-                <div className="py-2">
-                  {filteredAlumni.map((person) => (
-                    <Link 
-                      to={`/directory?id=${person.id}`} 
-                      key={person.id}
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors"
-                    >
-                      <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center overflow-hidden flex-shrink-0">
-                        <img src={person.avatar} alt={person.name} className="w-full h-full object-cover" />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-sm font-bold text-slate-800 truncate">{person.name}</h4>
-                        <p className="text-xs text-slate-500 truncate">{person.role} at {person.company}</p>
-                      </div>
-                    </Link>
-                  ))}
-                  <div className="border-t border-slate-100 mt-1 pt-1">
-                    <Link to={`/directory?search=${searchQuery}`} className="block px-4 py-2 text-xs font-bold text-blue-600 text-center hover:bg-blue-50 transition-colors">
-                      View all results
-                    </Link>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-4 text-center text-sm text-slate-500">
-                  No alumni found matching "{searchQuery}"
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </motion.div>
-
       <div className="space-y-4">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
@@ -438,25 +296,26 @@ export default function Dashboard() {
               <div className="text-center py-4 text-slate-400 text-sm">No upcoming events.</div>
             ) : (
               upcomingEvents.map((event) => (
-              <Link to="/events" key={event.id}>
-                <motion.div 
-                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(248, 250, 252, 1)' }}
-                  className="flex items-start gap-3 p-3 -mx-3 rounded-2xl transition-all group cursor-pointer border border-transparent hover:border-slate-100 hover:shadow-sm"
-                >
-                  <div className="w-14 h-14 rounded-2xl bg-blue-50 flex flex-col items-center justify-center text-blue-700 flex-shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
-                    <span className="text-[10px] font-bold uppercase tracking-wider">{event.date.split(' ')[0]}</span>
-                    <span className="text-xl font-bold leading-none">{event.date.split(' ')[1].replace(',', '')}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors truncate">{event.title}</h3>
-                    <p className="text-xs text-slate-500 mt-1 font-medium truncate">{stripEventSeconds(event.time)} • {event.location}</p>
-                  </div>
-                </motion.div>
-              </Link>
-            ))
-          )}
-        </div>
-      </motion.div>
+                <Link to="/events" key={event.id}>
+                  <motion.div 
+                    whileHover={{ scale: 1.02, backgroundColor: 'rgba(248, 250, 252, 1)' }}
+                    className="flex items-start gap-3 p-3 -mx-3 rounded-2xl transition-all group cursor-pointer border border-transparent hover:border-slate-100 hover:shadow-sm"
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-blue-50 flex flex-col items-center justify-center text-blue-700 flex-shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
+                      <span className="text-[10px] font-bold uppercase tracking-wider">{event.date.split(' ')[0]}</span>
+                      <span className="text-xl font-bold leading-none">{event.date.split(' ')[1].replace(',', '')}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors truncate">{event.title}</h3>
+                      <p className="text-xs text-slate-500 mt-1 font-medium truncate">{stripEventSeconds(event.time)} • {event.location}</p>
+                    </div>
+                  </motion.div>
+                </Link>
+              ))
+            )}
+          </div>
+        </motion.div>
+      </div>
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -507,6 +366,5 @@ export default function Dashboard() {
         </div>
       </motion.div>
     </div>
-  </div>
-);
+  );
 }

@@ -7,7 +7,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from App.main import create_app
 from App.database import db
-from App.Models import User, Alumni, Admin, Event, Job, JobApplication, Message, CommunityBoard, EventRegistration
+from App.Models import (
+    User, Alumni, Admin, Event, Job, JobApplication, Message,
+    CommunityBoard, EventRegistration, BoardPost
+)
 from App.Controllers import (
     userController,
     adminControllers,

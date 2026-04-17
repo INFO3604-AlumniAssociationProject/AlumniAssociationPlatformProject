@@ -82,3 +82,62 @@ def sendAnnouncement():
         return jsonify({"message": "Announcement sent", "recipientCount": count}), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+
+@admin_bp.route("/users/<user_id>/suspend", methods=["POST"])
+@jwt_required()
+def suspendUser(user_id):
+    user = currentUser()
+    if not user or user.role != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+    data = _payload()
+    reason = data.get("reason", "").strip()
+    duration_days = data.get("durationDays")
+    if not reason:
+        return jsonify({"error": "reason is required"}), 400
+    if not duration_days or not isinstance(duration_days, int) or duration_days <= 0:
+        return jsonify({"error": "durationDays must be a positive integer"}), 400
+    try:
+        adminControllers.suspendUser(user_id, reason, duration_days, user.userID)
+        return jsonify({"message": "User suspended", "userID": user_id}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+@admin_bp.route("/users/<user_id>/unsuspend", methods=["POST"])
+@jwt_required()
+def unsuspendUser(user_id):
+    user = currentUser()
+    if not user or user.role != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+    try:
+        adminControllers.unsuspendUser(user_id)
+        return jsonify({"message": "User unsuspended", "userID": user_id}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
+@admin_bp.route("/users/<user_id>/ban", methods=["POST"])
+@jwt_required()
+def banUser(user_id):
+    user = currentUser()
+    if not user or user.role != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+    data = _payload()
+    reason = data.get("reason", "").strip()
+    if not reason:
+        return jsonify({"error": "reason is required"}), 400
+    try:
+        adminControllers.banUser(user_id, reason, user.userID)
+        return jsonify({"message": "User banned", "userID": user_id}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+@admin_bp.route("/users/<user_id>/unban", methods=["POST"])
+@jwt_required()
+def unbanUser(user_id):
+    user = currentUser()
+    if not user or user.role != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+    try:
+        adminControllers.unbanUser(user_id)
+        return jsonify({"message": "User unbanned", "userID": user_id}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404

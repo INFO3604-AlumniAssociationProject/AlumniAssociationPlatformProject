@@ -101,8 +101,8 @@ export default function Profile() {
         {/* Cover Image */}
         <div className="h-48 bg-slate-200 relative group">
           <img src={userProfile.coverImage} alt="Cover" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = placeholderImage; }} />
-          <button onClick={() => coverInputRef.current?.click()} className="absolute bottom-4 right-4 px-3 py-1.5 bg-black/40 backdrop-blur-md rounded-xl text-white text-xs font-bold opacity-0 group-hover:opacity-100 transition-all flex items-center gap-2">
-            <Camera size={14} /> Change Cover
+          <button onClick={() => coverInputRef.current?.click()} className="absolute bottom-4 right-4 px-4 py-2 bg-black/50 backdrop-blur-md rounded-xl text-white text-sm font-bold opacity-0 group-hover:opacity-100 transition-all flex items-center gap-2 hover:bg-black/70">
+            <Camera size={18} /> Change Cover
           </button>
           <input type="file" ref={coverInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'cover')} />
         </div>
@@ -114,8 +114,12 @@ export default function Profile() {
               <div className="w-32 h-32 rounded-full border-[6px] border-white overflow-hidden bg-white shadow-lg">
                 <img src={userProfile.avatar} alt={userProfile.name} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = placeholderImage; }} />
               </div>
-              <button onClick={() => fileInputRef.current?.click()} className="absolute bottom-2 right-2 w-8 h-8 bg-blue-600 rounded-full text-white flex items-center justify-center border-2 border-white hover:bg-blue-700 transition-all shadow-md">
-                <Camera size={14} />
+              <button 
+                onClick={() => fileInputRef.current?.click()} 
+                className="absolute bottom-2 right-2 w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center border-2 border-white hover:bg-blue-700 transition-all shadow-md"
+                style={{ borderRadius: '50%' }}
+              >
+                <Camera size={20} />
               </button>
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'avatar')} />
             </div>

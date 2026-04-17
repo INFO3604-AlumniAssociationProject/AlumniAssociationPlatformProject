@@ -4,13 +4,15 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import { motion } from 'motion/react';
-import { MessageSquare, Search, Send, User, Check, X, Plus, MoreVertical, Trash2, Flag, Ban, BellOff, CheckCheck } from 'lucide-react';
+import { MessageSquare, Search, Send, User, Check, X, Plus, MoreVertical, Trash2, Flag, Ban, BellOff, CheckCheck, ArrowLeft, ShieldAlert } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { API_BASE } from '../apiConfig';
+import { getAuthToken } from '../AuthContext';
 
 export default function Messages() {
   const { user } = useAuth();
-  const { messages, messageRequests, acceptMessageRequest, rejectMessageRequest, sendMessage, loading, alumni } = useData();
+  const { messages, messageRequests, acceptMessageRequest, rejectMessageRequest, sendMessage, loading, alumni, reportUser } = useData();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'inbox' | 'requests'>('inbox');
   const navigate = useNavigate();
@@ -30,6 +32,8 @@ export default function Messages() {
   const [isTyping, setIsTyping] = useState(false);
   const [mutedChats, setMutedChats] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [reportTargetId, setReportTargetId] = useState<string | null>(null);
+  const [reportTargetName, setReportTargetName] = useState<string>('');
 
   // Simulate loading
   React.useEffect(() => {
@@ -125,13 +129,49 @@ export default function Messages() {
         .sort((a, b) => new Date(a.rawTimestamp || a.time).getTime() - new Date(b.rawTimestamp || b.time).getTime())
     : [];
 
+  const openReportModal = (userId: string, userName: string) => {
+    setReportTargetId(userId);
+    setReportTargetName(userName);
+    setReportReason('');
+    setReportOtherText('');
+    setShowReportModal(true);
+  };
+
+  const submitReport = async () => {
+    if (!reportReason) {
+      showToast('Please select a reason', 'error');
+      return;
+    }
+    if (reportReason === 'Other' && !reportOtherText.trim()) {
+      showToast('Please provide details', 'error');
+      return;
+    }
+
+    if (reportTargetId && reportTargetName) {
+      await reportUser(reportTargetId, reportTargetName, reportReason, reportOtherText);
+      showToast('Report submitted to admin', 'success');
+      setShowReportModal(false);
+      setShowChatActions(false);
+    } else {
+      showToast('Unable to report user', 'error');
+    }
+  };
+
+  // Check if message is from system/admin
+  const isSystemMessage = (msg: typeof messages[0]) => {
+    return msg.sender === 'UWI Admin' || msg.sender === 'System' || msg.content.startsWith('📢 Announcement:') || msg.content.startsWith('🚨 User Report');
+  };
+
+  // Count pending message requests (incoming connection requests)
+  const pendingRequestsCount = messageRequests.length;
+
   return (
     <div className="h-[calc(100vh-140px)] flex flex-col pt-2">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-xl font-bold text-[var(--uwi-blue-800)]">Messages</h1>
         <button 
           onClick={() => setShowNewMessageModal(true)}
-          className="p-2 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-colors"
+          className="p-2 bg-blue-50 text-blue-600 rounded-full hover:bg-[#0ea5e9] hover:text-white transition-colors"
         >
           <Plus size={20} />
         </button>
@@ -149,8 +189,10 @@ export default function Messages() {
           className={`ui-tab-pill ${activeTab === 'requests' ? 'tab-active' : 'text-slate-500 hover:text-slate-700'} relative`}
         >
           Requests
-          {messageRequests.length > 0 && (
-            <span className="absolute top-1 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
+          {pendingRequestsCount > 0 && (
+            <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[20px] h-5 bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
+              {pendingRequestsCount}
+            </span>
           )}
         </button>
       </div>
@@ -160,8 +202,12 @@ export default function Messages() {
           <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm overflow-hidden border border-slate-100">
             {/* Chat Header */}
             <div className="p-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50 relative">
-              <button onClick={() => setSelectedChat(null)} className="md:hidden text-slate-500">
-                <X size={20} />
+              <button 
+                onClick={() => setSelectedChat(null)} 
+                className="p-2 hover:bg-slate-100 rounded-full text-slate-600"
+                aria-label="Back to conversations"
+              >
+                <ArrowLeft size={20} />
               </button>
               <div className="relative">
                 <img src={activeChat?.avatar} alt={activeChat?.sender} className="w-10 h-10 rounded-full object-cover" />
@@ -199,25 +245,25 @@ export default function Messages() {
                       }
                       setShowChatActions(false);
                     }}
-                    className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                    className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
                   >
                     <BellOff size={16} /> {mutedChats.includes(selectedChat) ? 'Unmute chat' : 'Mute chat'}
                   </button>
                   <button 
                     onClick={() => {
-                      setShowReportModal(true);
+                      openReportModal(selectedChat, activeChat?.sender || '');
                       setShowChatActions(false);
                     }}
-                    className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                    className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
                   >
-                    <Flag size={16} /> Report chat
+                    <Flag size={16} /> Report user
                   </button>
                   <button 
                     onClick={() => {
                       setShowConfirmModal({ type: 'block', chat: selectedChat });
                       setShowChatActions(false);
                     }}
-                    className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                    className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-500 hover:text-white flex items-center gap-2"
                   >
                     <Ban size={16} /> Block user
                   </button>
@@ -226,7 +272,7 @@ export default function Messages() {
                       setShowConfirmModal({ type: 'delete', chat: selectedChat });
                       setShowChatActions(false);
                     }}
-                    className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-slate-100"
+                    className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-500 hover:text-white flex items-center gap-2 border-t border-slate-100"
                   >
                     <Trash2 size={16} /> Delete chat
                   </button>
@@ -241,15 +287,24 @@ export default function Messages() {
               ) : (
                 conversationMessages.map((msg) => {
                   const isMine = msg.senderId === user?.id;
+                  const systemMsg = isSystemMessage(msg);
                   return (
                     <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                       <div
                         className={`p-3 rounded-2xl max-w-[80%] shadow-sm ${
                           isMine
                             ? 'bg-blue-600 text-white rounded-br-none'
-                            : 'bg-white border border-slate-100 rounded-tl-none text-slate-800'
+                            : systemMsg
+                              ? 'bg-amber-50 border-2 border-amber-200 text-slate-800 rounded-tl-none'
+                              : 'bg-white border border-slate-100 rounded-tl-none text-slate-800'
                         }`}
                       >
+                        {systemMsg && !isMine && (
+                          <div className="flex items-center gap-1 mb-1 text-amber-600">
+                            <ShieldAlert size={12} />
+                            <span className="text-[10px] font-bold uppercase">System</span>
+                          </div>
+                        )}
                         <p className="text-sm leading-relaxed">{msg.content}</p>
                         <div className={`flex items-center gap-2 mt-2 ${isMine ? 'justify-end text-blue-100' : 'text-slate-400'}`}>
                           <span className="text-[10px] uppercase font-bold">{isMine ? 'You' : activeChat?.sender}</span>
@@ -314,36 +369,48 @@ export default function Messages() {
                 <p>No messages yet</p>
               </div>
             ) : (
-              conversations.map((msg) => (
-                <motion.div 
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  onClick={() => setSelectedChat(getChatPartnerId(msg))}
-                  className={`p-4 rounded-2xl cursor-pointer transition-all border ${msg.unread ? 'bg-white border-blue-100 shadow-sm' : 'bg-transparent border-transparent hover:bg-white hover:shadow-sm'}`}
-                >
-                  <div className="flex gap-3">
-                    <div className="relative">
-                      <img src={msg.avatar} alt={msg.sender} className="w-12 h-12 rounded-full object-cover" />
-                      {msg.online && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start mb-1">
-                        <h3 className={`text-sm truncate ${msg.unread ? 'font-bold text-slate-800' : 'font-medium text-slate-700'}`}>
-                          {msg.sender}
-                        </h3>
-                        <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">{msg.time}</span>
+              conversations.map((msg) => {
+                const systemMsg = isSystemMessage(msg);
+                return (
+                  <motion.div 
+                    key={msg.id}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    onClick={() => setSelectedChat(getChatPartnerId(msg))}
+                    className={`p-4 rounded-2xl cursor-pointer transition-all border ${
+                      msg.unread 
+                        ? 'bg-white border-blue-100 shadow-sm' 
+                        : systemMsg 
+                          ? 'bg-amber-50 border-amber-200' 
+                          : 'bg-transparent border-transparent hover:bg-white hover:shadow-sm'
+                    }`}
+                  >
+                    <div className="flex gap-3">
+                      <div className="relative">
+                        <img src={msg.avatar} alt={msg.sender} className="w-12 h-12 rounded-full object-cover" />
+                        {msg.online && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>}
                       </div>
-                      <p className={`text-xs truncate ${msg.unread ? 'font-medium text-slate-600' : 'text-slate-500'}`}>
-                        {msg.preview}
-                      </p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start mb-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className={`text-sm truncate ${msg.unread ? 'font-bold text-slate-800' : 'font-medium text-slate-700'}`}>
+                              {msg.sender}
+                            </h3>
+                            {systemMsg && <ShieldAlert size={12} className="text-amber-600" />}
+                          </div>
+                          <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">{msg.time}</span>
+                        </div>
+                        <p className={`text-xs truncate ${msg.unread ? 'font-medium text-slate-600' : 'text-slate-500'}`}>
+                          {msg.preview}
+                        </p>
+                      </div>
+                      {msg.unread && (
+                        <div className="w-2.5 h-2.5 bg-blue-600 rounded-full self-center ml-2"></div>
+                      )}
                     </div>
-                    {msg.unread && (
-                      <div className="w-2.5 h-2.5 bg-blue-600 rounded-full self-center ml-2"></div>
-                    )}
-                  </div>
-                </motion.div>
-              ))
+                  </motion.div>
+                );
+              })
             )}
           </div>
         )
@@ -381,7 +448,7 @@ export default function Messages() {
                   </button>
                   <button 
                     onClick={() => rejectMessageRequest(req.id)}
-                    className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-medium flex items-center justify-center gap-1 hover:bg-slate-200 transition-colors"
+                    className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-medium flex items-center justify-center gap-1 hover:bg-red-500 hover:text-white transition-colors"
                   >
                     <X size={14} /> Decline
                   </button>
@@ -449,13 +516,13 @@ export default function Messages() {
             className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl"
           >
             <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-              <h2 className="font-bold text-lg text-slate-800">Report Chat</h2>
+              <h2 className="font-bold text-lg text-slate-800">Report User</h2>
               <button onClick={() => setShowReportModal(false)} className="p-1 hover:bg-slate-100 rounded-full">
                 <X size={20} className="text-slate-500" />
               </button>
             </div>
             <div className="p-4 space-y-4">
-              <p className="text-sm text-slate-600">Why are you reporting this chat?</p>
+              <p className="text-sm text-slate-600">Why are you reporting {reportTargetName}?</p>
               
               <div className="space-y-2">
                 {['Spam', 'Harassment', 'Inappropriate content', 'Other'].map((reason) => (
@@ -490,20 +557,7 @@ export default function Messages() {
                   Cancel
                 </button>
                 <button 
-                  onClick={() => {
-                    if (!reportReason) {
-                      showToast('Please select a reason', 'error');
-                      return;
-                    }
-                    if (reportReason === 'Other' && !reportOtherText.trim()) {
-                      showToast('Please provide details', 'error');
-                      return;
-                    }
-                    showToast('Report submitted successfully', 'success');
-                    setShowReportModal(false);
-                    setReportReason('');
-                    setReportOtherText('');
-                  }}
+                  onClick={submitReport}
                   className="flex-1 py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
                 >
                   Submit Report

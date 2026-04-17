@@ -10,7 +10,7 @@ message_bp = Blueprint("messages", __name__, url_prefix="/messages")
 
 @message_bp.route("/inbox", methods=["GET"])
 @jwt_required()
-def inboxApi():
+def inbox():
     user = currentUser()
     if not user:
         return jsonify({"error": "Authentication required"}), 401
@@ -20,7 +20,7 @@ def inboxApi():
 
 @message_bp.route("/sent", methods=["GET"])
 @jwt_required()
-def sentApi():
+def sent():
     user = currentUser()
     if not user:
         return jsonify({"error": "Authentication required"}), 401

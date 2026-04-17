@@ -10,7 +10,7 @@ job_bp = Blueprint("jobs", __name__, url_prefix="/jobs")
 
 @job_bp.route("/list", methods=["GET"])
 @jwt_required()
-def listJobsApi():
+def listJobs():
     user = currentUser()
     if not user:
         return jsonify({"error": "Authentication required"}), 401

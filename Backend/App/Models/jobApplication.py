@@ -10,6 +10,8 @@ class JobApplication(db.Model):
     alumniID = db.Column(db.String(36), db.ForeignKey("alumni.alumniID"), nullable=False)
     applicationDate = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     status = db.Column(db.String(50), nullable=False, default="pending")
+    resumeURL = db.Column(db.String(255), nullable=True)
+    coverLetter = db.Column(db.Text, nullable=True)
 
     job = db.relationship("Job", back_populates="applications")
     applicant = db.relationship("Alumni", back_populates="applications")
@@ -23,5 +25,7 @@ class JobApplication(db.Model):
             "jobID": self.jobID,
             "alumniID": self.alumniID,
             "applicationDate": self.applicationDate.isoformat(),
-            "status": self.status
+            "status": self.status,
+            "resumeURL": self.resumeURL,
+            "coverLetter": self.coverLetter
         }

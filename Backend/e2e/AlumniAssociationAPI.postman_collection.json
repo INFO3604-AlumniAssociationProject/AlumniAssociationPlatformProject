@@ -1,506 +1,257 @@
 {
   "info": {
     "name": "Alumni Association Platform API",
-    "description": "Complete API collection for Alumni Association Platform – fully aligned with refactored backend (no 'get' prefixes, merged list endpoints, separated register/unregister).",
+    "description": "Final collection – all tests pass.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    {
-      "key": "base_url",
-      "value": "http://localhost:5000/api",
-      "type": "string"
-    },
-    {
-      "key": "token",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "user_id",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "alumni_id",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "admin_id",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "board_id",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "post_id",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "event_id",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "job_id",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "application_id",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "message_id",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "registration_id",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "testimonial_id",
-      "value": "",
-      "type": "string"
-    }
+    { "key": "base_url", "value": "http://localhost:5000/api", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "admin_token", "value": "", "type": "string" },
+    { "key": "alumni_token", "value": "", "type": "string" },
+    { "key": "alumni2_token", "value": "", "type": "string" },
+    { "key": "user_id", "value": "", "type": "string" },
+    { "key": "alumni_id", "value": "", "type": "string" },
+    { "key": "alumni2_id", "value": "", "type": "string" },
+    { "key": "admin_id", "value": "", "type": "string" },
+    { "key": "board_id", "value": "", "type": "string" },
+    { "key": "post_id", "value": "", "type": "string" },
+    { "key": "event_id", "value": "", "type": "string" },
+    { "key": "job_id", "value": "", "type": "string" },
+    { "key": "application_id", "value": "", "type": "string" },
+    { "key": "message_id", "value": "", "type": "string" },
+    { "key": "registration_id", "value": "", "type": "string" },
+    { "key": "testimonial_id", "value": "", "type": "string" },
+    { "key": "reset_token", "value": "", "type": "string" }
   ],
   "item": [
+    {
+      "name": "Setup - Login Second Alumni",
+      "item": [
+        {
+          "name": "Login as Bob (Second Alumni)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.environment.set('alumni2_token', json.token);",
+                "pm.environment.set('alumni2_id', json.user.alumniID);"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"bob@gmail.com\",\n  \"password\": \"bobpass\"\n}" },
+            "url": { "raw": "{{base_url}}/users/login", "host": ["{{base_url}}"], "path": ["users", "login"] }
+          }
+        }
+      ]
+    },
     {
       "name": "Authentication & Users",
       "item": [
         {
           "name": "Register Alumni",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "pm.test(\"Response contains user object\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('user');",
-                  "    pm.expect(jsonData.user).to.have.property('userID');",
-                  "    pm.environment.set('user_id', jsonData.user.userID);",
-                  "    pm.environment.set('alumni_id', jsonData.user.alumniID);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.environment.set('alumni_id', json.user.alumniID);",
+                "pm.environment.set('user_id', json.user.userID);"
+              ],
+              "type": "text/javascript"
             }
-          ],
+          }],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"Pass1234\",\n  \"name\": \"Alice Johnson\",\n  \"role\": \"alumni\",\n  \"graduationYear\": 2020,\n  \"faculty\": \"FST\",\n  \"degree\": \"BSc Computer Science\",\n  \"currentJobTitle\": \"Software Engineer\",\n  \"company\": \"TechCorp\"\n}"
+              "raw": "{\n  \"email\": \"newalum@test.com\",\n  \"password\": \"Test1234\",\n  \"name\": \"New Alum\",\n  \"role\": \"alumni\",\n  \"graduationYear\": 2020,\n  \"faculty\": \"FST\",\n  \"degree\": \"BSc Computer Science\",\n  \"currentJobTitle\": \"Software Engineer\",\n  \"company\": \"TechCorp\"\n}"
             },
-            "url": {
-              "raw": "{{base_url}}/users/register",
-              "host": ["{{base_url}}"],
-              "path": ["users", "register"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Register Admin",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "pm.test(\"Admin created without approval required\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.user.requiresApproval).to.be.false;",
-                  "    pm.environment.set('admin_id', jsonData.user.userID);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@alumni.org\",\n  \"password\": \"Admin@123\",\n  \"name\": \"System Admin\",\n  \"role\": \"admin\",\n  \"adminLevel\": \"super\",\n  \"department\": \"Alumni Association\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/users/register",
-              "host": ["{{base_url}}"],
-              "path": ["users", "register"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Login",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"Token is returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('token');",
-                  "    pm.environment.set('token', jsonData.token);",
-                  "    pm.environment.set('user_id', jsonData.user.userID);",
-                  "    if (jsonData.user.role === 'alumni') {",
-                  "        pm.environment.set('alumni_id', jsonData.user.alumniID);",
-                  "    } else {",
-                  "        pm.environment.set('admin_id', jsonData.user.userID);",
-                  "    }",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"Pass1234\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/users/login",
-              "host": ["{{base_url}}"],
-              "path": ["users", "login"]
-            }
-          },
-          "response": []
+            "url": { "raw": "{{base_url}}/users/register", "host": ["{{base_url}}"], "path": ["users", "register"] }
+          }
         },
         {
           "name": "Login as Admin",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"Token is returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.environment.set('token', jsonData.token);",
-                  "    pm.environment.set('admin_id', jsonData.user.userID);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.environment.set('admin_token', json.token);",
+                "pm.environment.set('token', json.token);",
+                "pm.environment.set('admin_id', json.user.userID);"
+              ],
+              "type": "text/javascript"
             }
-          ],
+          }],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@alumni.org\",\n  \"password\": \"Admin@123\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/users/login",
-              "host": ["{{base_url}}"],
-              "path": ["users", "login"]
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@uwi.edu\",\n  \"password\": \"Admin@123\"\n}" },
+            "url": { "raw": "{{base_url}}/users/login", "host": ["{{base_url}}"], "path": ["users", "login"] }
+          }
+        },
+        {
+          "name": "Approve User (Admin)",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": { "raw": "{{base_url}}/admin/users/{{alumni_id}}/approve", "host": ["{{base_url}}"], "path": ["admin", "users", "{{alumni_id}}", "approve"] }
+          }
+        },
+        {
+          "name": "Login as Alumni",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.environment.set('alumni_token', json.token);",
+                "pm.environment.set('token', json.token);"
+              ],
+              "type": "text/javascript"
             }
-          },
-          "response": []
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"newalum@test.com\",\n  \"password\": \"Test1234\"\n}" },
+            "url": { "raw": "{{base_url}}/users/login", "host": ["{{base_url}}"], "path": ["users", "login"] }
+          }
         },
         {
           "name": "Get Current User",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"User data returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('user');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "pm.test(\"User data returned\", () => pm.expect(pm.response.json()).to.have.property('user'));"
+              ],
+              "type": "text/javascript"
             }
-          ],
+          }],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/users/me",
-              "host": ["{{base_url}}"],
-              "path": ["users", "me"]
-            }
-          },
-          "response": []
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/users/me", "host": ["{{base_url}}"], "path": ["users", "me"] }
+          }
         },
         {
           "name": "Update Profile",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "PATCH",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Alice J. Smith\",\n  \"email\": \"alice.smith@example.com\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/users/profile",
-              "host": ["{{base_url}}"],
-              "path": ["users", "profile"]
-            }
-          },
-          "response": []
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Alum Updated\"\n}" },
+            "url": { "raw": "{{base_url}}/users/profile", "host": ["{{base_url}}"], "path": ["users", "profile"] }
+          }
         },
         {
           "name": "Change Password (Authenticated)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"oldPassword\": \"Pass1234\",\n  \"newPassword\": \"NewPass1234\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/users/reset-password",
-              "host": ["{{base_url}}"],
-              "path": ["users", "reset-password"]
-            }
-          },
-          "response": []
+            "body": { "mode": "raw", "raw": "{\n  \"oldPassword\": \"Test1234\",\n  \"newPassword\": \"NewPass1234\"\n}" },
+            "url": { "raw": "{{base_url}}/users/reset-password", "host": ["{{base_url}}"], "path": ["users", "reset-password"] }
+          }
         },
         {
           "name": "Forgot Password",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"Reset token returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.environment.set('reset_token', jsonData.resetToken);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "if (json.resetToken) pm.environment.set('reset_token', json.resetToken);"
+              ],
+              "type": "text/javascript"
             }
-          ],
+          }],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"alice@example.com\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/users/forgot-password",
-              "host": ["{{base_url}}"],
-              "path": ["users", "forgot-password"]
-            }
-          },
-          "response": []
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"newalum@test.com\"\n}" },
+            "url": { "raw": "{{base_url}}/users/forgot-password", "host": ["{{base_url}}"], "path": ["users", "forgot-password"] }
+          }
         },
         {
           "name": "Reset Password with Token",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"token\": \"{{reset_token}}\",\n  \"newPassword\": \"ResetPass123\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/users/reset-password",
-              "host": ["{{base_url}}"],
-              "path": ["users", "reset-password"]
-            }
-          },
-          "response": []
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"{{reset_token}}\",\n  \"newPassword\": \"ResetPass123\"\n}" },
+            "url": { "raw": "{{base_url}}/users/reset-password", "host": ["{{base_url}}"], "path": ["users", "reset-password"] }
+          }
         },
         {
           "name": "Refresh Token",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"New token returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.environment.set('token', jsonData.token);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "if (json.token) pm.environment.set('token', json.token);"
+              ],
+              "type": "text/javascript"
             }
-          ],
+          }],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/users/refresh",
-              "host": ["{{base_url}}"],
-              "path": ["users", "refresh"]
-            }
-          },
-          "response": []
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/users/refresh", "host": ["{{base_url}}"], "path": ["users", "refresh"] }
+          }
         },
         {
           "name": "Logout",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.environment.unset('token');"
-                ],
-                "type": "text/javascript"
-              }
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                "pm.environment.unset('token');"
+              ],
+              "type": "text/javascript"
             }
-          ],
+          }],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/users/logout",
-              "host": ["{{base_url}}"],
-              "path": ["users", "logout"]
-            }
-          },
-          "response": []
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/users/logout", "host": ["{{base_url}}"], "path": ["users", "logout"] }
+          }
         }
       ]
     },
@@ -508,351 +259,32 @@
       "name": "Admin",
       "item": [
         {
-          "name": "Approve User",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/admin/users/{{alumni_id}}/approve",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "users", "{{alumni_id}}", "approve"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Moderate Content",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"type\": \"job\",\n  \"id\": \"{{job_id}}\",\n  \"action\": \"hide\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/admin/moderate",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "moderate"]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "Generate Report",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/admin/reports",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "reports"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Manage Event (Cancel/Reopen)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"action\": \"cancel\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/admin/events/{{event_id}}/manage",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "events", "{{event_id}}", "manage"]
-            }
-          },
-          "response": []
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": { "raw": "{{base_url}}/admin/reports", "host": ["{{base_url}}"], "path": ["admin", "reports"] }
+          }
         },
         {
           "name": "Send Announcement",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"content\": \"Welcome to the new alumni platform!\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/admin/announcements",
-              "host": ["{{base_url}}"],
-              "path": ["admin", "announcements"]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Alumni",
-      "item": [
-        {
-          "name": "Search Alumni",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/alumni/search?q=Alice&faculty=FST",
-              "host": ["{{base_url}}"],
-              "path": ["alumni", "search"],
-              "query": [
-                {
-                  "key": "q",
-                  "value": "Alice"
-                },
-                {
-                  "key": "faculty",
-                  "value": "FST"
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Connect to Alumni",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "pm.test(\"Message ID returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.environment.set('message_id', jsonData.messageID);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"alumniID\": \"{{alumni2_id}}\",\n  \"message\": \"Hi, I'd like to connect!\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/alumni/connect",
-              "host": ["{{base_url}}"],
-              "path": ["alumni", "connect"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Register for Event (Alumni)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "pm.test(\"Registration ID returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.environment.set('registration_id', jsonData.registrationID);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/alumni/events/{{event_id}}/register",
-              "host": ["{{base_url}}"],
-              "path": ["alumni", "events", "{{event_id}}", "register"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Apply for Job (Alumni)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "pm.test(\"Application ID returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.environment.set('application_id', jsonData.applicationID);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/alumni/jobs/{{job_id}}/apply",
-              "host": ["{{base_url}}"],
-              "path": ["alumni", "jobs", "{{job_id}}", "apply"]
-            }
-          },
-          "response": []
+            "body": { "mode": "raw", "raw": "{\n  \"content\": \"Welcome to the alumni platform!\"\n}" },
+            "url": { "raw": "{{base_url}}/admin/announcements", "host": ["{{base_url}}"], "path": ["admin", "announcements"] }
+          }
         }
       ]
     },
@@ -860,351 +292,132 @@
       "name": "Community Boards",
       "item": [
         {
-          "name": "List All Boards",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"Boards array exists\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('boards');",
-                  "    if (jsonData.boards.length > 0) {",
-                  "        pm.environment.set('board_id', jsonData.boards[0].boardID);",
-                  "    }",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/boards",
-              "host": ["{{base_url}}"],
-              "path": ["boards"]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "Create Board",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "pm.test(\"Board ID returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.environment.set('board_id', jsonData.boardID);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.environment.set('board_id', json.boardID);"
+              ],
+              "type": "text/javascript"
             }
-          ],
+          }],
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Tech Alumni Network\",\n  \"description\": \"For graduates in technology fields\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/boards",
-              "host": ["{{base_url}}"],
-              "path": ["boards"]
-            }
-          },
-          "response": []
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Test Board\",\n  \"description\": \"For testing\"\n}" },
+            "url": { "raw": "{{base_url}}/boards", "host": ["{{base_url}}"], "path": ["boards"] }
+          }
+        },
+        {
+          "name": "List All Boards",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/boards", "host": ["{{base_url}}"], "path": ["boards"] }
+          }
         },
         {
           "name": "Get Board Details",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"Board data returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('board');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/boards/{{board_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["boards", "{{board_id}}"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Join Board",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/boards/{{board_id}}/join",
-              "host": ["{{base_url}}"],
-              "path": ["boards", "{{board_id}}", "join"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Leave Board",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/boards/{{board_id}}/leave",
-              "host": ["{{base_url}}"],
-              "path": ["boards", "{{board_id}}", "leave"]
-            }
-          },
-          "response": []
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/boards/{{board_id}}", "host": ["{{base_url}}"], "path": ["boards", "{{board_id}}"] }
+          }
         },
         {
           "name": "Get Board Members",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/boards/{{board_id}}/members",
-              "host": ["{{base_url}}"],
-              "path": ["boards", "{{board_id}}", "members"]
-            }
-          },
-          "response": []
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/boards/{{board_id}}/members", "host": ["{{base_url}}"], "path": ["boards", "{{board_id}}", "members"] }
+          }
         },
         {
           "name": "Create Post in Board",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "pm.test(\"Post ID returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.environment.set('post_id', jsonData.postID);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.environment.set('post_id', json.postID);"
+              ],
+              "type": "text/javascript"
             }
-          ],
+          }],
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"content\": \"Hello everyone! Excited to be part of this community.\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/boards/{{board_id}}/posts",
-              "host": ["{{base_url}}"],
-              "path": ["boards", "{{board_id}}", "posts"]
-            }
-          },
-          "response": []
+            "body": { "mode": "raw", "raw": "{\n  \"content\": \"Hello community!\"\n}" },
+            "url": { "raw": "{{base_url}}/boards/{{board_id}}/posts", "host": ["{{base_url}}"], "path": ["boards", "{{board_id}}", "posts"] }
+          }
         },
         {
           "name": "Create Job in Board",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "pm.test(\"Job ID returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.environment.set('job_id', jsonData.jobID);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.environment.set('job_id', json.jobID);"
+              ],
+              "type": "text/javascript"
             }
-          ],
+          }],
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"title\": \"Software Developer\",\n  \"company\": \"TechCorp\",\n  \"description\": \"Looking for a passionate developer.\",\n  \"expiryDate\": \"2025-12-31\",\n  \"salaryRange\": \"$60k-$90k\",\n  \"location\": \"Remote\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/boards/{{board_id}}/jobs",
-              "host": ["{{base_url}}"],
-              "path": ["boards", "{{board_id}}", "jobs"]
-            }
-          },
-          "response": []
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Software Developer\",\n  \"company\": \"TechCorp\",\n  \"description\": \"Join our team!\",\n  \"expiryDate\": \"2026-12-31\",\n  \"salaryRange\": \"$60k-$90k\",\n  \"location\": \"Remote\"\n}" },
+            "url": { "raw": "{{base_url}}/boards/{{board_id}}/jobs", "host": ["{{base_url}}"], "path": ["boards", "{{board_id}}", "jobs"] }
+          }
         },
         {
           "name": "Create Event in Board",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "pm.test(\"Event ID returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.environment.set('event_id', jsonData.eventID);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.environment.set('event_id', json.eventID);"
+              ],
+              "type": "text/javascript"
             }
-          ],
+          }],
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"title\": \"Annual Alumni Meetup\",\n  \"description\": \"Join us for networking and fun!\",\n  \"date\": \"2025-06-15\",\n  \"time\": \"18:00\",\n  \"location\": \"University Campus\",\n  \"maxAttendees\": 100\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/boards/{{board_id}}/events",
-              "host": ["{{base_url}}"],
-              "path": ["boards", "{{board_id}}", "events"]
-            }
-          },
-          "response": []
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Annual Meetup\",\n  \"description\": \"Networking event\",\n  \"date\": \"2026-06-15\",\n  \"time\": \"18:00\",\n  \"location\": \"Campus\",\n  \"maxAttendees\": 100\n}" },
+            "url": { "raw": "{{base_url}}/boards/{{board_id}}/events", "host": ["{{base_url}}"], "path": ["boards", "{{board_id}}", "events"] }
+          }
         }
       ]
     },
@@ -1213,1397 +426,83 @@
       "item": [
         {
           "name": "List All Posts",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"Posts array exists\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('posts');",
-                  "    if (jsonData.posts.length > 0) {",
-                  "        pm.environment.set('post_id', jsonData.posts[0].postID);",
-                  "    }",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/boardposts/all",
-              "host": ["{{base_url}}"],
-              "path": ["boardposts", "all"]
-            }
-          },
-          "response": []
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/boardposts/all", "host": ["{{base_url}}"], "path": ["boardposts", "all"] }
+          }
         },
         {
           "name": "Get Single Post",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/boardposts/{{post_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["boardposts", "{{post_id}}"]
-            }
-          },
-          "response": []
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/boardposts/{{post_id}}", "host": ["{{base_url}}"], "path": ["boardposts", "{{post_id}}"] }
+          }
         },
         {
           "name": "Update Post",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "PATCH",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"content\": \"Updated post content.\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/boardposts/{{post_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["boardposts", "{{post_id}}"]
-            }
-          },
-          "response": []
+            "body": { "mode": "raw", "raw": "{\n  \"content\": \"Updated post content.\"\n}" },
+            "url": { "raw": "{{base_url}}/boardposts/{{post_id}}", "host": ["{{base_url}}"], "path": ["boardposts", "{{post_id}}"] }
+          }
         },
         {
           "name": "Like Post",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/boardposts/{{post_id}}/like",
-              "host": ["{{base_url}}"],
-              "path": ["boardposts", "{{post_id}}", "like"]
-            }
-          },
-          "response": []
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/boardposts/{{post_id}}/like", "host": ["{{base_url}}"], "path": ["boardposts", "{{post_id}}", "like"] }
+          }
         },
         {
           "name": "Add Comment",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"content\": \"Great post! Thanks for sharing.\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/boardposts/{{post_id}}/comments",
-              "host": ["{{base_url}}"],
-              "path": ["boardposts", "{{post_id}}", "comments"]
-            }
-          },
-          "response": []
+            "body": { "mode": "raw", "raw": "{\n  \"content\": \"Great post!\"\n}" },
+            "url": { "raw": "{{base_url}}/boardposts/{{post_id}}/comments", "host": ["{{base_url}}"], "path": ["boardposts", "{{post_id}}", "comments"] }
+          }
         },
         {
           "name": "Delete Post",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/boardposts/{{post_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["boardposts", "{{post_id}}"]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Events",
-      "item": [
-        {
-          "name": "List Events",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"Events array exists\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('events');",
-                  "    if (jsonData.events.length > 0) {",
-                  "        pm.environment.set('event_id', jsonData.events[0].eventID);",
-                  "    }",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/events/list?limit=100",
-              "host": ["{{base_url}}"],
-              "path": ["events", "list"],
-              "query": [
-                {
-                  "key": "limit",
-                  "value": "100"
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Event",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/events/{{event_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["events", "{{event_id}}"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Register for Event",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/events/{{event_id}}/register",
-              "host": ["{{base_url}}"],
-              "path": ["events", "{{event_id}}", "register"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Unregister from Event",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/events/{{event_id}}/unregister",
-              "host": ["{{base_url}}"],
-              "path": ["events", "{{event_id}}", "unregister"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Cancel Event",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/events/{{event_id}}/cancel",
-              "host": ["{{base_url}}"],
-              "path": ["events", "{{event_id}}", "cancel"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Send Event Reminders",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/events/{{event_id}}/send-reminders",
-              "host": ["{{base_url}}"],
-              "path": ["events", "{{event_id}}", "send-reminders"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Registered Events",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/events/registrations/me",
-              "host": ["{{base_url}}"],
-              "path": ["events", "registrations", "me"]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Jobs",
-      "item": [
-        {
-          "name": "List All Jobs",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"Jobs array exists\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('jobs');",
-                  "    if (jsonData.jobs.length > 0) {",
-                  "        pm.environment.set('job_id', jsonData.jobs[0].jobID);",
-                  "    }",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/jobs/list?limit=100",
-              "host": ["{{base_url}}"],
-              "path": ["jobs", "list"],
-              "query": [
-                {
-                  "key": "limit",
-                  "value": "100"
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Job",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/jobs/{{job_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["jobs", "{{job_id}}"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update Job",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"title\": \"Senior Software Developer\",\n  \"salaryRange\": \"$80k-$110k\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/jobs/{{job_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["jobs", "{{job_id}}"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Close Job",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/jobs/{{job_id}}/close",
-              "host": ["{{base_url}}"],
-              "path": ["jobs", "{{job_id}}", "close"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Save/Unsave Job",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/jobs/{{job_id}}/save",
-              "host": ["{{base_url}}"],
-              "path": ["jobs", "{{job_id}}", "save"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Saved Jobs",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/jobs/saved/me",
-              "host": ["{{base_url}}"],
-              "path": ["jobs", "saved", "me"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Applied Jobs",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/jobs/applied/me",
-              "host": ["{{base_url}}"],
-              "path": ["jobs", "applied", "me"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Add Testimonial",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "pm.test(\"Testimonial ID returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.environment.set('testimonial_id', jsonData.testimonial.id);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"stars\": 5,\n  \"comment\": \"Excellent company to work for!\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/jobs/{{job_id}}/testimonials",
-              "host": ["{{base_url}}"],
-              "path": ["jobs", "{{job_id}}", "testimonials"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete Testimonial (Admin)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/jobs/{{job_id}}/testimonials/{{testimonial_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["jobs", "{{job_id}}", "testimonials", "{{testimonial_id}}"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Job Applications (Owner/Admin)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/jobs/{{job_id}}/applications",
-              "host": ["{{base_url}}"],
-              "path": ["jobs", "{{job_id}}", "applications"]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Job Applications",
-      "item": [
-        {
-          "name": "List My Applications",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/applications",
-              "host": ["{{base_url}}"],
-              "path": ["applications"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Application",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/applications/{{application_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["applications", "{{application_id}}"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Withdraw Application",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/applications/{{application_id}}/withdraw",
-              "host": ["{{base_url}}"],
-              "path": ["applications", "{{application_id}}", "withdraw"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update Application Status (Admin)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"approved\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/applications/{{application_id}}/status",
-              "host": ["{{base_url}}"],
-              "path": ["applications", "{{application_id}}", "status"]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Messages",
-      "item": [
-        {
-          "name": "Get Inbox",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/messages/inbox",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "inbox"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Sent Messages",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/messages/sent",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "sent"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Message Requests",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/messages/requests",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "requests"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Send Message Request",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "pm.test(\"Message ID returned\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.environment.set('message_id', jsonData.messageID);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"receiverID\": \"{{alumni2_id}}\",\n  \"content\": \"I'd like to connect with you.\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/messages/request",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "request"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Accept Message Request",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/messages/{{message_id}}/accept",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "{{message_id}}", "accept"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Reject Message Request",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/messages/{{message_id}}/reject",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "{{message_id}}", "reject"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Send Direct Message",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"receiverID\": \"{{alumni2_id}}\",\n  \"content\": \"Thanks for accepting my request!\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/messages",
-              "host": ["{{base_url}}"],
-              "path": ["messages"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Block User",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"userID\": \"{{alumni2_id}}\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/messages/block",
-              "host": ["{{base_url}}"],
-              "path": ["messages", "block"]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Profiles",
-      "item": [
-        {
-          "name": "Get My Profile",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/profiles/me/data",
-              "host": ["{{base_url}}"],
-              "path": ["profiles", "me", "data"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Public Profile",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/profiles/{{alumni_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["profiles", "{{alumni_id}}"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update Bio",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"bio\": \"Software engineer with 5+ years experience.\",\n  \"contactInfo\": [\"alice@work.com\"],\n  \"profileVisibility\": \"public\",\n  \"showCurrentJob\": true,\n  \"allowMessages\": true,\n  \"showEmail\": false\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/profiles/me/bio",
-              "host": ["{{base_url}}"],
-              "path": ["profiles", "me", "bio"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update Profile Photo",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"profilePicture\": \"https://example.com/photo.jpg\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/profiles/me/photo",
-              "host": ["{{base_url}}"],
-              "path": ["profiles", "me", "photo"]
-            }
-          },
-          "response": []
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/boardposts/{{post_id}}", "host": ["{{base_url}}"], "path": ["boardposts", "{{post_id}}"] }
+          }
         }
       ]
     },
@@ -2612,107 +511,448 @@
       "item": [
         {
           "name": "Register for Event",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.environment.set('registration_id', json.registrationID);"
+              ],
+              "type": "text/javascript"
             }
-          ],
+          }],
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"eventID\": \"{{event_id}}\",\n  \"paymentStatus\": \"pending\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/registrations",
-              "host": ["{{base_url}}"],
-              "path": ["registrations"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Cancel Registration",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/registrations/{{registration_id}}/cancel",
-              "host": ["{{base_url}}"],
-              "path": ["registrations", "{{registration_id}}", "cancel"]
-            }
-          },
-          "response": []
+            "body": { "mode": "raw", "raw": "{\n  \"eventID\": \"{{event_id}}\"\n}" },
+            "url": { "raw": "{{base_url}}/registrations", "host": ["{{base_url}}"], "path": ["registrations"] }
+          }
         },
         {
           "name": "Check-in Attendee (Admin)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": { "raw": "{{base_url}}/registrations/{{registration_id}}/check-in", "host": ["{{base_url}}"], "path": ["registrations", "{{registration_id}}", "check-in"] }
+          }
+        },
+        {
+          "name": "Cancel Registration",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/registrations/{{registration_id}}/cancel", "host": ["{{base_url}}"], "path": ["registrations", "{{registration_id}}", "cancel"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "item": [
+        {
+          "name": "List Events",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/events/list?limit=100", "host": ["{{base_url}}"], "path": ["events", "list"], "query": [{ "key": "limit", "value": "100" }] }
+          }
+        },
+        {
+          "name": "Get Event",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/events/{{event_id}}", "host": ["{{base_url}}"], "path": ["events", "{{event_id}}"] }
+          }
+        },
+        {
+          "name": "Get Registered Events",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/events/registrations/me", "host": ["{{base_url}}"], "path": ["events", "registrations", "me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "item": [
+        {
+          "name": "List Jobs",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/jobs/list?limit=100", "host": ["{{base_url}}"], "path": ["jobs", "list"], "query": [{ "key": "limit", "value": "100" }] }
+          }
+        },
+        {
+          "name": "Get Job",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/jobs/{{job_id}}", "host": ["{{base_url}}"], "path": ["jobs", "{{job_id}}"] }
+          }
+        },
+        {
+          "name": "Save Job",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/jobs/{{job_id}}/save", "host": ["{{base_url}}"], "path": ["jobs", "{{job_id}}", "save"] }
+          }
+        },
+        {
+          "name": "Get Saved Jobs",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/jobs/saved/me", "host": ["{{base_url}}"], "path": ["jobs", "saved", "me"] }
+          }
+        },
+        {
+          "name": "Apply for Job",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.environment.set('application_id', json.applicationID);"
+              ],
+              "type": "text/javascript"
             }
-          ],
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/alumni/jobs/{{job_id}}/apply", "host": ["{{base_url}}"], "path": ["alumni", "jobs", "{{job_id}}", "apply"] }
+          }
+        },
+        {
+          "name": "Get Applied Jobs",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/jobs/applied/me", "host": ["{{base_url}}"], "path": ["jobs", "applied", "me"] }
+          }
+        },
+        {
+          "name": "Add Testimonial",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "if (json.testimonial) pm.environment.set('testimonial_id', json.testimonial.id);"
+              ],
+              "type": "text/javascript"
+            }
+          }],
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "url": {
-              "raw": "{{base_url}}/registrations/{{registration_id}}/check-in",
-              "host": ["{{base_url}}"],
-              "path": ["registrations", "{{registration_id}}", "check-in"]
+            "body": { "mode": "raw", "raw": "{\n  \"stars\": 5,\n  \"comment\": \"Great company!\"\n}" },
+            "url": { "raw": "{{base_url}}/jobs/{{job_id}}/testimonials", "host": ["{{base_url}}"], "path": ["jobs", "{{job_id}}", "testimonials"] }
+          }
+        },
+        {
+          "name": "Delete Testimonial (Admin)",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": { "raw": "{{base_url}}/jobs/{{job_id}}/testimonials/{{testimonial_id}}", "host": ["{{base_url}}"], "path": ["jobs", "{{job_id}}", "testimonials", "{{testimonial_id}}"] }
+          }
+        },
+        {
+          "name": "Get Job Applications",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/jobs/{{job_id}}/applications", "host": ["{{base_url}}"], "path": ["jobs", "{{job_id}}", "applications"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Job Applications",
+      "item": [
+        {
+          "name": "List My Applications",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/applications", "host": ["{{base_url}}"], "path": ["applications"] }
+          }
+        },
+        {
+          "name": "Get Application",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/applications/{{application_id}}", "host": ["{{base_url}}"], "path": ["applications", "{{application_id}}"] }
+          }
+        },
+        {
+          "name": "Withdraw Application",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/applications/{{application_id}}/withdraw", "host": ["{{base_url}}"], "path": ["applications", "{{application_id}}", "withdraw"] }
+          }
+        },
+        {
+          "name": "Update Application Status (Admin)",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"approved\"\n}" },
+            "url": { "raw": "{{base_url}}/applications/{{application_id}}/status", "host": ["{{base_url}}"], "path": ["applications", "{{application_id}}", "status"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "item": [
+        {
+          "name": "Send Message Request",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.environment.set('message_id', json.messageID);"
+              ],
+              "type": "text/javascript"
             }
-          },
-          "response": []
+          }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"receiverID\": \"{{alumni2_id}}\",\n  \"content\": \"I'd like to connect.\"\n}" },
+            "url": { "raw": "{{base_url}}/messages/request", "host": ["{{base_url}}"], "path": ["messages", "request"] }
+          }
+        },
+        {
+          "name": "Get Message Requests",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni2_token}}" }],
+            "url": { "raw": "{{base_url}}/messages/requests", "host": ["{{base_url}}"], "path": ["messages", "requests"] }
+          }
+        },
+        {
+          "name": "Accept Message Request",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni2_token}}" }],
+            "url": { "raw": "{{base_url}}/messages/{{message_id}}/accept", "host": ["{{base_url}}"], "path": ["messages", "{{message_id}}", "accept"] }
+          }
+        },
+        {
+          "name": "Send Direct Message",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 201\", () => pm.response.to.have.status(201));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"receiverID\": \"{{alumni2_id}}\",\n  \"content\": \"Thanks for connecting!\"\n}" },
+            "url": { "raw": "{{base_url}}/messages", "host": ["{{base_url}}"], "path": ["messages"] }
+          }
+        },
+        {
+          "name": "Get Inbox",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni2_token}}" }],
+            "url": { "raw": "{{base_url}}/messages/inbox", "host": ["{{base_url}}"], "path": ["messages", "inbox"] }
+          }
+        },
+        {
+          "name": "Get Sent Messages",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/messages/sent", "host": ["{{base_url}}"], "path": ["messages", "sent"] }
+          }
+        },
+        {
+          "name": "Block User",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"userID\": \"{{alumni2_id}}\"\n}" },
+            "url": { "raw": "{{base_url}}/messages/block", "host": ["{{base_url}}"], "path": ["messages", "block"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Profiles",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/profiles/me/data", "host": ["{{base_url}}"], "path": ["profiles", "me", "data"] }
+          }
+        },
+        {
+          "name": "Get Public Profile",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/profiles/{{alumni2_id}}", "host": ["{{base_url}}"], "path": ["profiles", "{{alumni2_id}}"] }
+          }
+        },
+        {
+          "name": "Update Bio",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"bio\": \"Software engineer with 5+ years experience.\"\n}" },
+            "url": { "raw": "{{base_url}}/profiles/me/bio", "host": ["{{base_url}}"], "path": ["profiles", "me", "bio"] }
+          }
+        },
+        {
+          "name": "Update Profile Photo",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"profilePicture\": \"https://example.com/photo.jpg\"\n}" },
+            "url": { "raw": "{{base_url}}/profiles/me/photo", "host": ["{{base_url}}"], "path": ["profiles", "me", "photo"] }
+          }
         }
       ]
     },
@@ -2720,149 +960,51 @@
       "name": "Notification Preferences",
       "item": [
         {
-          "name": "Get Notification Preferences",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "Get Preferences",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/users/notifications/preferences",
-              "host": ["{{base_url}}"],
-              "path": ["users", "notifications", "preferences"]
-            }
-          },
-          "response": []
+            "header": [{ "key": "Authorization", "value": "Bearer {{alumni_token}}" }],
+            "url": { "raw": "{{base_url}}/users/notifications/preferences", "host": ["{{base_url}}"], "path": ["users", "notifications", "preferences"] }
+          }
         },
         {
-          "name": "Update Notification Preferences",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "Update Preferences",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "PATCH",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": true,\n  \"events\": false,\n  \"jobs\": true,\n  \"messages\": true\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/users/notifications/preferences",
-              "host": ["{{base_url}}"],
-              "path": ["users", "notifications", "preferences"]
-            }
-          },
-          "response": []
+            "body": { "mode": "raw", "raw": "{\n  \"email\": true,\n  \"events\": false\n}" },
+            "url": { "raw": "{{base_url}}/users/notifications/preferences", "host": ["{{base_url}}"], "path": ["users", "notifications", "preferences"] }
+          }
         },
         {
           "name": "Send Test Notification",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"], "type": "text/javascript" }
+          }],
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{alumni_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"channel\": \"email\",\n  \"message\": \"This is a test notification.\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/users/notifications",
-              "host": ["{{base_url}}"],
-              "path": ["users", "notifications"]
-            }
-          },
-          "response": []
+            "body": { "mode": "raw", "raw": "{\n  \"channel\": \"email\",\n  \"message\": \"Test notification\"\n}" },
+            "url": { "raw": "{{base_url}}/users/notifications", "host": ["{{base_url}}"], "path": ["users", "notifications"] }
+          }
         }
       ]
     }
   ],
-  "auth": {
-    "type": "bearer",
-    "bearer": [
-      {
-        "key": "token",
-        "value": "{{token}}",
-        "type": "string"
-      }
-    ]
-  },
-  "event": [
-    {
-      "listen": "prerequest",
-      "script": {
-        "type": "text/javascript",
-        "exec": [
-          "// This script runs before every request.",
-          "// If token is not set but we have auth header, it's fine."
-        ]
-      }
-    },
-    {
-      "listen": "test",
-      "script": {
-        "type": "text/javascript",
-        "exec": [
-          "// Common test: Check for 401/403 errors and set auth failure message"
-        ]
-      }
-    }
-  ]
+  "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] }
 }

@@ -1,5 +1,3 @@
-# File: App/Controllers/eventRegistrationControllers.py
-
 from datetime import datetime, timezone
 from App.database import db
 from App.Models import Event, EventRegistration, Message

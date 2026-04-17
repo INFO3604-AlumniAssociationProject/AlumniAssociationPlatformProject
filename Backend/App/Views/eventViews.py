@@ -10,7 +10,7 @@ event_bp = Blueprint("events", __name__, url_prefix="/events")
 
 @event_bp.route("/list", methods=["GET"])
 @jwt_required()
-def listEventsApi():
+def listEvents():
     user = currentUser()
     if not user:
         return jsonify({"error": "Authentication required"}), 401

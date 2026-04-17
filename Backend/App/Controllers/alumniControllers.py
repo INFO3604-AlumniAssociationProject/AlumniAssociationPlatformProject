@@ -24,5 +24,6 @@ def searchAlumni(query: str = None, faculty: str = None, graduation_year: int = 
             "currentJobTitle": a.currentJobTitle,
             "company": a.company,
             "location": a.location,
+            "isPublicProfile": a.isPublicProfile,  
         })
     return results

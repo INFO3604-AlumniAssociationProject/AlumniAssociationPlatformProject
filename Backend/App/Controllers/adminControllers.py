@@ -1,6 +1,7 @@
 from App.database import db
 from App.Models import User, Event, Job, Message
 from App.Controllers import eventController
+from datetime import datetime, timezone, timedelta
 
 
 def approveUser(user_id: str) -> None:
@@ -84,3 +85,44 @@ def sendAnnouncement(admin_id: str, content: str) -> int:
         count += 1
     db.session.commit()
     return count
+
+def suspendUser(user_id: str, reason: str, duration_days: int, admin_id: str) -> None:
+    user = db.session.get(User, user_id)
+    if not user:
+        raise ValueError("User not found")
+    if user.role == "admin":
+        raise ValueError("Cannot suspend admin users")
+    
+    user.isSuspended = True
+    user.suspendedUntil = datetime.now(timezone.utc) + timedelta(days=duration_days)
+    user.banReason = reason  # could also store suspension reason separately; reuse for now
+    db.session.commit()
+
+def unsuspendUser(user_id: str) -> None:
+    user = db.session.get(User, user_id)
+    if not user:
+        raise ValueError("User not found")
+    user.isSuspended = False
+    user.suspendedUntil = None
+    db.session.commit()
+
+def banUser(user_id: str, reason: str, admin_id: str) -> None:
+    user = db.session.get(User, user_id)
+    if not user:
+        raise ValueError("User not found")
+    if user.role == "admin":
+        raise ValueError("Cannot ban admin users")
+    
+    user.isSuspended = True  # permanent ban also uses suspended flag
+    user.suspendedUntil = None  # permanent
+    user.banReason = reason
+    db.session.commit()
+
+def unbanUser(user_id: str) -> None:
+    user = db.session.get(User, user_id)
+    if not user:
+        raise ValueError("User not found")
+    user.isSuspended = False
+    user.suspendedUntil = None
+    user.banReason = None
+    db.session.commit()

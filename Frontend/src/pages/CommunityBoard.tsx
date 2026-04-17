@@ -1,3 +1,4 @@
+// File: CommunityBoard.tsx
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
@@ -50,7 +51,7 @@ export default function CommunityBoard() {
   const [showPostJobModal, setShowPostJobModal] = useState(false);
   const [newJob, setNewJob] = useState({ title: '', company: '', location: '', salary: '', type: 'Full-time', description: '' });
 
-  // State for Viewing Applicants (for job posters)
+  // State for Viewing Applicants (admin only)
   const [viewApplicantsJobId, setViewApplicantsJobId] = useState<string | null>(null);
   const [viewPdfUrl, setViewPdfUrl] = useState<string | null>(null);
 
@@ -86,7 +87,7 @@ export default function CommunityBoard() {
     setShowCreateModal(false);
     setNewCommunityName('');
     setNewCommunityDesc('');
-    showToast('Community created!', 'success');
+    showToast('Community created! A confirmation message has been sent.', 'success');
   };
 
   const handlePost = async (e: React.FormEvent) => {
@@ -221,7 +222,7 @@ export default function CommunityBoard() {
                   <textarea value={newCommunityDesc} onChange={(e) => setNewCommunityDesc(e.target.value)} placeholder="Description" className="w-full p-3 bg-slate-50 rounded-xl h-24" required />
                   <div className="flex gap-3">
                     <button type="button" onClick={() => setShowCreateModal(false)} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">Cancel</button>
-                    <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold">Create</button>
+                    <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700">Create</button>
                   </div>
                 </form>
               </motion.div>
@@ -247,12 +248,19 @@ export default function CommunityBoard() {
             <h1 className="text-2xl font-bold">{currentCommunity.name}</h1>
             <p className="text-blue-100 text-sm mt-1">{currentCommunity.description}</p>
           </div>
-          <button onClick={handleJoinLeave} className={`px-4 py-2 rounded-xl text-sm font-bold ${currentCommunity.isMember ? 'bg-white/20 text-white' : 'bg-white text-blue-600'}`}>
+          <button 
+            onClick={handleJoinLeave} 
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${
+              currentCommunity.isMember 
+                ? 'bg-white/20 text-white hover:bg-white/30' 
+                : 'bg-white text-blue-600 hover:bg-blue-50'
+            }`}
+          >
             {currentCommunity.isMember ? 'Leave' : 'Join'}
           </button>
         </div>
         <div className="flex items-center gap-3 mt-4">
-          <button onClick={handleMembersClick} className="flex items-center gap-1 bg-white/20 px-3 py-1.5 rounded-xl text-xs">
+          <button onClick={handleMembersClick} className="flex items-center gap-1 bg-white/20 px-3 py-1.5 rounded-xl text-xs hover:bg-white/30">
             <Users size={14} /> {currentCommunity.members} Members
           </button>
           <span className="bg-white/20 px-3 py-1.5 rounded-xl text-xs">Admin: {currentCommunity.adminName}</span>
@@ -310,11 +318,21 @@ export default function CommunityBoard() {
                       </div>
                       <p className="text-sm text-slate-700 mb-4">{post.content}</p>
                       <div className="flex items-center gap-4 border-t border-slate-100 pt-3">
-                        <button onClick={() => toggleLikePost(post.id)} className={`flex items-center gap-1 text-xs font-bold ${post.liked ? 'text-blue-600' : 'text-slate-500'}`}>
+                        <button 
+                          onClick={() => toggleLikePost(post.id)} 
+                          className={`flex items-center gap-1 text-xs font-bold transition-colors px-3 py-1.5 rounded-lg ${
+                            post.liked 
+                              ? 'text-blue-600 bg-blue-50' 
+                              : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50'
+                          }`}
+                        >
                           <ThumbsUp size={16} className={post.liked ? 'fill-blue-600' : ''} /> {post.likes}
                         </button>
-                        <button onClick={() => setShowLikers(post.id)} className="text-xs font-bold text-slate-500">View Likers</button>
-                        <button onClick={() => setActiveCommentPostId(activeCommentPostId === post.id ? null : post.id)} className="text-xs font-bold text-slate-500 flex items-center gap-1">
+                        <button onClick={() => setShowLikers(post.id)} className="text-xs font-bold text-slate-500 hover:text-slate-700">View Likers</button>
+                        <button 
+                          onClick={() => setActiveCommentPostId(activeCommentPostId === post.id ? null : post.id)} 
+                          className="text-xs font-bold text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                        >
                           <MessageSquare size={16} /> {post.commentsCount}
                         </button>
                       </div>
@@ -339,7 +357,9 @@ export default function CommunityBoard() {
                             </div>
                             <form onSubmit={(e) => handleComment(e, post.id)} className="flex gap-2">
                               <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Write a comment..." className="flex-1 bg-slate-50 rounded-xl px-3 py-2 text-xs" />
-                              <button type="submit" disabled={!newComment.trim()} className="p-2 bg-blue-600 text-white rounded-xl"><Send size={14} /></button>
+                              <button type="submit" disabled={!newComment.trim()} className="p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50">
+                                <Send size={14} />
+                              </button>
                             </form>
                           </motion.div>
                         )}
@@ -380,8 +400,9 @@ export default function CommunityBoard() {
                       <span className="text-xs bg-slate-50 px-2 py-1 rounded-lg">{job.type}</span>
                       {job.status === 'pending' && <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-lg">Pending</span>}
                     </div>
-                    {(user?.role === 'admin' || job.postedBy === user?.id) && (
-                      <button onClick={async () => { await fetchAndSetJobApplications?.(job.id); setViewApplicantsJobId(job.id); }} className="mt-2 text-xs text-purple-600 flex items-center gap-1">
+                    {/* Only admin can view applicants */}
+                    {user?.role === 'admin' && (
+                      <button onClick={async () => { await fetchAndSetJobApplications?.(job.id); setViewApplicantsJobId(job.id); }} className="mt-2 text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1">
                         <Eye size={12} /> Applicants ({job.applicants?.length || 0})
                       </button>
                     )}
@@ -414,7 +435,7 @@ export default function CommunityBoard() {
                     <h3 className="font-bold text-slate-800">{event.title}</h3>
                     <p className="text-xs text-slate-500"><Calendar size={12} className="inline mr-1" />{event.date} • {stripEventSeconds(event.time)}</p>
                     <p className="text-xs text-slate-500"><MapPin size={12} className="inline mr-1" />{event.location}</p>
-                    <button onClick={() => navigate(`/events/${event.id}`)} className="text-xs text-blue-600 mt-1">View Details</button>
+                    <button onClick={() => navigate(`/events/${event.id}`)} className="text-xs text-blue-600 hover:underline mt-1">View Details</button>
                   </div>
                 </motion.div>
               ))
@@ -423,7 +444,7 @@ export default function CommunityBoard() {
         </div>
       )}
 
-      {/* Likers Modal - Small Scrollable Window */}
+      {/* Likers Modal */}
       <AnimatePresence>
         {showLikers && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" data-overlay="true">
@@ -488,7 +509,7 @@ export default function CommunityBoard() {
                 <textarea value={newJob.description} onChange={(e) => setNewJob({...newJob, description: e.target.value})} placeholder="Description" className="w-full p-3 bg-slate-50 rounded-xl h-24" required />
                 <div className="flex gap-3">
                   <button type="button" onClick={() => setShowPostJobModal(false)} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">Cancel</button>
-                  <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold">Post</button>
+                  <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700">Post</button>
                 </div>
               </form>
             </motion.div>
@@ -509,7 +530,7 @@ export default function CommunityBoard() {
                 <input type="text" value={newEvent.location} onChange={(e) => setNewEvent({...newEvent, location: e.target.value})} placeholder="Location" className="w-full p-3 bg-slate-50 rounded-xl" required />
                 <div className="flex gap-3">
                   <button type="button" onClick={() => setShowCreateEventModal(false)} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">Cancel</button>
-                  <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold">Create</button>
+                  <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700">Create</button>
                 </div>
               </form>
             </motion.div>
@@ -517,7 +538,7 @@ export default function CommunityBoard() {
         )}
       </AnimatePresence>
 
-      {/* View Applicants Modal */}
+      {/* View Applicants Modal (Admin only) */}
       <AnimatePresence>
         {viewApplicantsJobId && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" data-overlay="true">
@@ -537,11 +558,11 @@ export default function CommunityBoard() {
                         <p className="text-xs text-slate-400">{app.date}</p>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => setViewPdfUrl(app.resumeUrl)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg">View Resume</button>
+                        <button onClick={() => setViewPdfUrl(app.resumeUrl)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-100">View Resume</button>
                         {app.status === 'pending' && (
                           <>
-                            <button onClick={() => { approveApplication(viewApplicantsJobId, app.applicantId); showToast('Approved!', 'success'); }} className="text-xs bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg">Approve</button>
-                            <button onClick={() => { rejectApplication(viewApplicantsJobId, app.applicantId); showToast('Rejected', 'info'); }} className="text-xs bg-red-50 text-red-600 px-3 py-1.5 rounded-lg">Reject</button>
+                            <button onClick={() => { approveApplication(viewApplicantsJobId, app.applicantId); showToast('Approved!', 'success'); }} className="text-xs bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg hover:bg-emerald-100">Approve</button>
+                            <button onClick={() => { rejectApplication(viewApplicantsJobId, app.applicantId); showToast('Rejected', 'info'); }} className="text-xs bg-red-50 text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-100">Reject</button>
                           </>
                         )}
                       </div>

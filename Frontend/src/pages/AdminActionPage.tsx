@@ -13,7 +13,7 @@ import PDFViewer from '../components/PDFViewer';
 export default function AdminActionPage() {
   const { action } = useParams();
   const { showToast } = useToast();
-  const { jobs, approveApplication, rejectApplication, loading, fetchAndSetJobApplications } = useData();
+  const { jobs, approveApplication, rejectApplication, loading, fetchAndSetJobApplications, addAnnouncement, userProfile } = useData();
   const [loadedApplicants, setLoadedApplicants] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [reportData, setReportData] = useState<any>(null);
@@ -80,18 +80,16 @@ export default function AdminActionPage() {
     if (!announcementContent.trim()) return;
     setPostingAnnouncement(true);
     try {
-      const res = await fetch(`${API_BASE}/admin/announcements`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${getAuthToken()}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: announcementContent }),
-      });
-      if (res.ok) {
-        showToast('Announcement posted successfully!', 'success');
-        setAnnouncementTitle('');
-        setAnnouncementContent('');
-      } else {
-        showToast('Failed to post announcement', 'error');
-      }
+      await addAnnouncement(
+        announcementContent,
+        userProfile?.name || 'UWI Admin',
+        userProfile?.avatar || `https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff`
+      );
+      showToast('Announcement posted successfully!', 'success');
+      setAnnouncementTitle('');
+      setAnnouncementContent('');
+    } catch {
+      showToast('Failed to post announcement', 'error');
     } finally {
       setPostingAnnouncement(false);
     }
@@ -113,7 +111,7 @@ export default function AdminActionPage() {
   const pendingApplications = jobs.flatMap(job => 
     (job.applicants || [])
       .filter(app => app.status === 'pending')
-      .map(app => ({ ...app, jobTitle: job.title, company: job.company }))
+      .map(app => ({ ...app, jobTitle: job.title, company: job.company, jobId: job.id }))
   );
 
   // Get all testimonials across all jobs
@@ -145,7 +143,7 @@ export default function AdminActionPage() {
         {action === 'announcements' && (
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Title</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Title (Optional)</label>
               <input 
                 type="text" 
                 value={announcementTitle}
@@ -165,12 +163,12 @@ export default function AdminActionPage() {
               ></textarea>
             </div>
             <div className="flex items-center gap-2">
-              <input type="checkbox" id="notify" className="rounded text-blue-600 focus:ring-blue-500" />
-              <label htmlFor="notify" className="text-sm text-slate-600">Send push notification to all users</label>
+              <input type="checkbox" id="notify" className="rounded text-blue-600 focus:ring-blue-500" defaultChecked />
+              <label htmlFor="notify" className="text-sm text-slate-600">Send as direct message to all alumni</label>
             </div>
             <button 
               onClick={handlePostAnnouncement} 
-              disabled={!announcementTitle.trim() || !announcementContent.trim() || postingAnnouncement}
+              disabled={!announcementContent.trim() || postingAnnouncement}
               className="btn ui-btn w-full py-3 rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save size={18} /> Post Announcement
@@ -272,37 +270,38 @@ export default function AdminActionPage() {
                     </div>
                   )}
 
-                    <div className="flex items-center justify-between mt-3">
+                  <div className="flex items-center justify-between mt-3">
+                    <button 
+                      onClick={() => setViewPdfUrl(app.resumeUrl)}
+                      className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline"
+                    >
+                      <FileText size={14} /> View Resume
+                    </button>
+                    <div className="flex gap-2">
                       <button 
-                        onClick={() => setViewPdfUrl(app.resumeUrl)}
-                        className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline"
+                        onClick={() => handleApproveApp(app.jobId, app.applicantId)}
+                        disabled={loading?.approvingApplication}
+                        className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                        title="Approve"
                       >
-                        <FileText size={14} /> View Resume
+                        <Check size={16} />
                       </button>
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => handleApproveApp(app.jobId, app.applicantId)}
-                          disabled={loading?.approvingApplication}
-                          className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-100 transition-colors disabled:opacity-50"
-                          title="Approve"
-                        >
-                          <Check size={16} />
-                        </button>
-                        <button 
-                          onClick={() => handleRejectApp(app.jobId, app.applicantId)}
-                          disabled={loading?.rejectingApplication}
-                          className="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100 transition-colors disabled:opacity-50"
-                          title="Reject"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
+                      <button 
+                        onClick={() => handleRejectApp(app.jobId, app.applicantId)}
+                        disabled={loading?.rejectingApplication}
+                        className="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100 transition-colors disabled:opacity-50"
+                        title="Reject"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))
             )}
           </div>
         )}
+
         {action === 'testimonials' && (
           <div className="space-y-4">
             <h2 className="font-bold text-[var(--uwi-blue-800)] mb-2">Moderate Testimonials</h2>
@@ -361,7 +360,9 @@ export default function AdminActionPage() {
 
       {/* PDF Viewer Modal */}
       <AnimatePresence>
-        {viewPdfUrl && <PDFViewer pdfUrl={viewPdfUrl} onClose={() => setViewPdfUrl(null)} />}
+        {viewPdfUrl && (
+          <PDFViewer pdfUrl={viewPdfUrl} onClose={() => setViewPdfUrl(null)} />
+        )}
       </AnimatePresence>
     </div>
   );

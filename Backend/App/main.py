@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, send_from_directory
 from flask_cors import CORS
 from flask_migrate import Migrate
 from App.Controllers.auth import setup_jwt, add_auth_context
@@ -32,7 +32,13 @@ def create_app(config_overrides: dict | None = None):
     app = Flask(__name__)
     jwt = setup_jwt(app)
     add_auth_context(app)
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+
+    # Database configuration: use DATABASE_URL from environment (Render PostgreSQL)
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url and database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url or 'sqlite:///database.db'
+
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24).hex())
     app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', os.urandom(24).hex())
@@ -54,7 +60,7 @@ def create_app(config_overrides: dict | None = None):
 
     db.init_app(app)
     migrate.init_app(app, db)
-    
+
     CORS(
         app,
         resources={r"/api/*": {
@@ -77,5 +83,24 @@ def create_app(config_overrides: dict | None = None):
     for blueprint in legacy_blueprints:
         blueprint_prefix = blueprint.url_prefix or ""
         app.register_blueprint(blueprint, url_prefix=blueprint_prefix, name=f"legacy_{blueprint.name}")
+
+    # ----------------------------------------------------------------------
+    # Serve React static files (production only)
+    # ----------------------------------------------------------------------
+    frontend_dist = BASE_DIR.parent.parent / 'Frontend' / 'dist'
+
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def serve_react(path):
+        if path and (frontend_dist / path).exists():
+            return send_from_directory(frontend_dist, path)
+        return send_from_directory(frontend_dist, 'index.html')
+
+    # ----------------------------------------------------------------------
+    # Health check endpoint for Render
+    # ----------------------------------------------------------------------
+    @app.route('/health')
+    def health():
+        return {'status': 'ok'}, 200
 
     return app

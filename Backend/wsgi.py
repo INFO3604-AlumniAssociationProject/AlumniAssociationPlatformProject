@@ -24,6 +24,18 @@ app = create_app()
 migrate = Migrate(app, db)
 
 
+# ----------------------------------------------------------------------
+# Auto‑initialize database on first deploy (e.g., Render)
+# ----------------------------------------------------------------------
+with app.app_context():
+    # Check if any users exist; if not, create tables and add sample data.
+    if not User.query.first():
+        print("No users found. Initializing database with sample data...")
+        initialize_database(app, create_default_admin=True)
+        add_sample_data(app)
+        print("Database initialized and sample data added.")
+
+
 # ---------------------------
 # Core database commands
 # ---------------------------
@@ -161,8 +173,8 @@ def register_event_cmd(alumni_id, event_id):
 @click.argument("job_id")
 def apply_job_cmd(alumni_id, job_id):
     try:
-        app = createApplication(alumni_id, job_id)
-        app_id = getattr(app, 'applicationID', None) or getattr(app, 'applicationId', None) or str(app)
+        app_obj = createApplication(alumni_id, job_id)
+        app_id = getattr(app_obj, 'applicationID', None) or getattr(app_obj, 'applicationId', None) or str(app_obj)
         print(f"Application submitted: {app_id}")
     except Exception as e:
         print(f"Error: {e}")

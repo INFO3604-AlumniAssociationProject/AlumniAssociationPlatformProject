@@ -1,53 +1,32 @@
-# render.yaml
-# Place this file in the ROOT of your GitHub repository.
-# Render will automatically detect it and create the services defined below.
-
 services:
-  # ----------------------------------------------------------------------
-  # Backend API Service (Flask)
-  # ----------------------------------------------------------------------
   - type: web
-    name: uwi-alumni-backend                     # Choose a unique name for your backend
-    runtime: python
+    name: alumni-association-platform
+    env: python
     repo: https://github.com/INFO3604-AlumniAssociationProject/AlumniAssociationPlatformProject
-    branch: main                                 # Or your default branch
-    rootDir: Backend                             # Important! Points to the backend folder
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn -w 4 -b 0.0.0.0:$PORT wsgi:app
+    plan: free
+    branch: main
+    rootDir: Backend
+    buildCommand: |
+      pip install -r requirements.txt
+      cd ../Frontend && npm install && npm run build
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /health
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.11
+      - key: FLASK_ENV
+        value: production
       - key: SECRET_KEY
-        generateValue: true                      # Render auto-generates a secure secret
+        generateValue: true
       - key: JWT_SECRET_KEY
         generateValue: true
-      - key: PRODUCTION
-        value: "true"
       - key: FRONTEND_ORIGINS
-        value: "https://uwi-alumni-frontend.onrender.com"   # Replace with actual frontend URL after deployment
-      - key: PYTHON_VERSION
-        value: "3.10.11"
+        value: https://alumni-association-platform.onrender.com
       - key: DATABASE_URL
         fromDatabase:
-          name: uwi-alumni-db                    # Links to the PostgreSQL database defined below
+          name: alumni-db
           property: connectionString
 
-  # ----------------------------------------------------------------------
-  # Frontend Service (React + Vite)
-  # ----------------------------------------------------------------------
-  - type: web
-    name: uwi-alumni-frontend                    # Choose a unique name for your frontend
-    runtime: static
-    repo: https://github.com/SoftwareEngineeringAssignmentTwo/SoftwareEngineeringTwoAssignmentTwo
-    branch: main
-    rootDir: Frontend                            # Points to the frontend folder
-    buildCommand: npm install && npm run build
-    staticPublishPath: ./dist                    # Vite builds to the 'dist' folder
-    envVars:
-      - key: VITE_API_URL
-        value: "https://uwi-alumni-backend.onrender.com/api"   # Replace with actual backend URL after deployment
-
-# ------------------------------------------------------------------------
-# PostgreSQL Database (Highly Recommended for Production)
-# ------------------------------------------------------------------------
 databases:
-  - name: uwi-alumni-db
-    plan: free                                   # Upgrade to a paid plan for production use
+  - name: alumni-db
+    plan: free

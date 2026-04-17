@@ -6,7 +6,7 @@ import { useData } from '../DataContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Briefcase, MapPin, DollarSign, Clock, Search, Bookmark, Bell, Menu, X, 
-  CheckCircle, Eye, Share2, ArrowLeft, Upload 
+  CheckCircle, Share2, Upload 
 } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import { useNavigate } from 'react-router-dom';
@@ -15,8 +15,7 @@ import PDFViewer from '../components/PDFViewer';
 export default function Jobs() {
   const { user } = useAuth();
   const { 
-    jobs, saveJob, submitJobApplication, approveApplication, rejectApplication, 
-    userProfile, fetchAndSetJobApplications, loading 
+    jobs, saveJob, submitJobApplication, userProfile, loading 
   } = useData();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -40,10 +39,6 @@ export default function Jobs() {
   const [showApplyModal, setShowApplyModal] = useState<string | null>(null);
   const [application, setApplication] = useState({ coverLetter: '', resume: null as File | null });
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // View applicants modal
-  const [viewApplicantsJobId, setViewApplicantsJobId] = useState<string | null>(null);
-  const [viewPdfUrl, setViewPdfUrl] = useState<string | null>(null);
   
   // Loading state for skeleton
   const [isLoading, setIsLoading] = useState(true);
@@ -75,7 +70,8 @@ export default function Jobs() {
     const matchesLocation = filterLocation === 'All' || job.location === filterLocation;
     const matchesCompany = filterCompany === 'All' || job.company === filterCompany;
     
-    const isVisible = job.status === 'approved' || user?.role === 'admin' || job.postedBy === user?.id;
+    // Only show approved jobs to regular users; admin sees all
+    const isVisible = job.status === 'approved' || user?.role === 'admin';
     
     return matchesSearch && matchesType && matchesLocation && matchesCompany && isVisible;
   });
@@ -122,16 +118,6 @@ export default function Jobs() {
       showToast('Application submitted!', 'success');
     };
     reader.readAsDataURL(application.resume);
-  };
-
-  const handleApproveApplication = async (jobId: string, applicantId: string) => {
-    const ok = await approveApplication(jobId, applicantId);
-    showToast(ok ? 'Application approved!' : 'Failed to approve', ok ? 'success' : 'error');
-  };
-
-  const handleRejectApplication = async (jobId: string, applicantId: string) => {
-    const ok = await rejectApplication(jobId, applicantId);
-    showToast(ok ? 'Application rejected' : 'Failed to reject', ok ? 'info' : 'error');
   };
 
   return (
@@ -248,8 +234,10 @@ export default function Jobs() {
               </div>
 
               <div className="flex flex-wrap gap-2 mt-3">
+                {/* Salary display – removed extra dollar sign; backend already includes $ */}
                 <span className="text-xs bg-slate-50 px-2 py-1 rounded-lg text-slate-600 flex items-center gap-1">
-                  <DollarSign size={12} /> {job.salary}
+                  <DollarSign size={12} className="text-emerald-500" /> 
+                  <span className="font-medium text-emerald-700">{job.salary || 'Not specified'}</span>
                 </span>
                 <span className="text-xs bg-slate-50 px-2 py-1 rounded-lg text-slate-600 flex items-center gap-1">
                   <Clock size={12} /> {job.posted}
@@ -259,18 +247,6 @@ export default function Jobs() {
                 </span>
                 {job.status === 'pending' && (
                   <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-lg">Pending</span>
-                )}
-                {(user?.role === 'admin' || job.postedBy === user?.id) && (
-                  <button 
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      await fetchAndSetJobApplications?.(job.id);
-                      setViewApplicantsJobId(job.id);
-                    }}
-                    className="text-xs bg-purple-50 text-purple-600 px-2 py-1 rounded-lg flex items-center gap-1"
-                  >
-                    <Eye size={12} /> Applicants ({job.applicants?.length || 0})
-                  </button>
                 )}
               </div>
 
@@ -301,7 +277,7 @@ export default function Jobs() {
         )}
       </div>
 
-      {/* Sidebar Filter Drawer - Fast animation from left edge */}
+      {/* Sidebar Filter Drawer */}
       <AnimatePresence>
         {sidebarOpen && (
           <>
@@ -309,61 +285,70 @@ export default function Jobs() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+              transition={{ duration: 0.1 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+              style={{ top: '96px', bottom: '80px' }}
               onClick={() => setSidebarOpen(false)}
             />
             <motion.div
-              initial={{ x: '-100%' }}
+              initial={{ x: -300 }}
               animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', stiffness: 350, damping: 28 }}
-              className="fixed left-0 top-0 bottom-0 w-80 bg-white z-50 p-5 overflow-y-auto shadow-xl"
+              exit={{ x: -300 }}
+              transition={{ type: 'tween', duration: 0.15 }}
+              className="fixed left-0 bg-white z-50 w-80 overflow-y-auto shadow-xl"
+              style={{ 
+                top: '96px',
+                bottom: '80px',
+                maxWidth: 'calc(100% - 40px)',
+                left: 'max(0px, calc((100% - 430px) / 2))'
+              }}
             >
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-bold text-slate-800">Filters</h2>
-                <button onClick={() => setSidebarOpen(false)} className="p-1">
-                  <X size={20} className="text-slate-500" />
+              <div className="p-5">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-lg font-bold text-slate-800">Filters</h2>
+                  <button onClick={() => setSidebarOpen(false)} className="p-1">
+                    <X size={20} className="text-slate-500" />
+                  </button>
+                </div>
+
+                {/* Tabs */}
+                <div className="space-y-1 mb-6">
+                  <button
+                    onClick={() => { setActiveTab('all'); setSidebarOpen(false); }}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold ${activeTab === 'all' ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+                  >
+                    All Jobs
+                  </button>
+                  <button
+                    onClick={() => { setActiveTab('saved'); setSidebarOpen(false); }}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center justify-between ${activeTab === 'saved' ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+                  >
+                    Saved Jobs
+                    <span className="text-xs bg-slate-200 px-2 py-0.5 rounded-full">{savedJobsCount}</span>
+                  </button>
+                  <button
+                    onClick={() => { setActiveTab('applied'); setSidebarOpen(false); }}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center justify-between ${activeTab === 'applied' ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+                  >
+                    Applied Jobs
+                    <span className="text-xs bg-slate-200 px-2 py-0.5 rounded-full">{appliedJobsCount}</span>
+                  </button>
+                </div>
+
+                {/* Alerts Toggle */}
+                <button
+                  onClick={() => {
+                    setAlertsEnabled(!alertsEnabled);
+                    showToast(alertsEnabled ? 'Job alerts disabled' : 'Job alerts enabled', 'success');
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-bold mb-6 ${alertsEnabled ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+                >
+                  <span className="flex items-center gap-2"><Bell size={16} /> Job Alerts</span>
+                  <span className={`text-xs ${alertsEnabled ? 'text-blue-600' : 'text-slate-400'}`}>{alertsEnabled ? 'On' : 'Off'}</span>
                 </button>
+
+                <p className="text-xs text-slate-400 text-center mt-4">Use the top bar for type/location filters</p>
               </div>
-
-              {/* Tabs */}
-              <div className="space-y-1 mb-6">
-                <button
-                  onClick={() => { setActiveTab('all'); setSidebarOpen(false); }}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold ${activeTab === 'all' ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
-                >
-                  All Jobs
-                </button>
-                <button
-                  onClick={() => { setActiveTab('saved'); setSidebarOpen(false); }}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center justify-between ${activeTab === 'saved' ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
-                >
-                  Saved Jobs
-                  <span className="text-xs bg-slate-200 px-2 py-0.5 rounded-full">{savedJobsCount}</span>
-                </button>
-                <button
-                  onClick={() => { setActiveTab('applied'); setSidebarOpen(false); }}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center justify-between ${activeTab === 'applied' ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
-                >
-                  Applied Jobs
-                  <span className="text-xs bg-slate-200 px-2 py-0.5 rounded-full">{appliedJobsCount}</span>
-                </button>
-              </div>
-
-              {/* Alerts Toggle */}
-              <button
-                onClick={() => {
-                  setAlertsEnabled(!alertsEnabled);
-                  showToast(alertsEnabled ? 'Job alerts disabled' : 'Job alerts enabled', 'success');
-                }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-bold mb-6 ${alertsEnabled ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
-              >
-                <span className="flex items-center gap-2"><Bell size={16} /> Job Alerts</span>
-                <span className={`text-xs ${alertsEnabled ? 'text-blue-600' : 'text-slate-400'}`}>{alertsEnabled ? 'On' : 'Off'}</span>
-              </button>
-
-              <p className="text-xs text-slate-400 text-center mt-4">Use the top bar for type/location filters</p>
             </motion.div>
           </>
         )}
@@ -415,72 +400,6 @@ export default function Jobs() {
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
-
-      {/* View Applicants Modal */}
-      <AnimatePresence>
-        {viewApplicantsJobId && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            data-overlay="true"
-          >
-            <motion.div 
-              initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
-              className="bg-white rounded-3xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center gap-2 mb-4">
-                <button onClick={() => setViewApplicantsJobId(null)} className="p-2 hover:bg-slate-100 rounded-full">
-                  <ArrowLeft size={20} />
-                </button>
-                <h2 className="text-xl font-bold">Applicants</h2>
-              </div>
-              
-              <div className="space-y-3">
-                {jobs.find(j => j.id === viewApplicantsJobId)?.applicants?.length === 0 ? (
-                  <p className="text-center py-8 text-slate-400">No applicants yet.</p>
-                ) : (
-                  jobs.find(j => j.id === viewApplicantsJobId)?.applicants?.map(app => (
-                    <div key={app.id} className="p-4 rounded-xl border border-slate-100">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-bold">{app.applicantName}</h3>
-                          <p className="text-xs text-slate-400">{app.date}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button onClick={() => setViewPdfUrl(app.resumeUrl)} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg">
-                            View Resume
-                          </button>
-                          {app.status === 'pending' && (
-                            <>
-                              <button onClick={() => handleApproveApplication(viewApplicantsJobId, app.applicantId)} className="text-xs bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg">
-                                Approve
-                              </button>
-                              <button onClick={() => handleRejectApplication(viewApplicantsJobId, app.applicantId)} className="text-xs bg-red-50 text-red-600 px-3 py-1.5 rounded-lg">
-                                Reject
-                              </button>
-                            </>
-                          )}
-                          {app.status !== 'pending' && (
-                            <span className={`text-xs px-3 py-1.5 rounded-lg ${app.status === 'approved' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
-                              {app.status}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <p className="text-sm text-slate-600 mt-2 bg-slate-50 p-3 rounded-lg">{app.coverLetter}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* PDF Viewer */}
-      <AnimatePresence>
-        {viewPdfUrl && <PDFViewer pdfUrl={viewPdfUrl} onClose={() => setViewPdfUrl(null)} />}
       </AnimatePresence>
     </div>
   );
