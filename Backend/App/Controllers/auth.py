@@ -1,3 +1,5 @@
+# File: App/Controllers/auth.py
+
 from flask_jwt_extended import (
     create_access_token,
     decode_token,
@@ -24,7 +26,7 @@ def issue_access_token(user: User) -> str:
     """
     Generate a JWT access token for the given user.
     """
-    return create_access_token(identity=user.userID)
+    return create_access_token(identity=user)
 
 
 def decode_access_token(token: str):
@@ -61,7 +63,8 @@ def setup_jwt(app):
 
     @jwt.user_identity_loader
     def user_identity_lookup(user):
-        return user
+        # Return the string userID as the JWT subject
+        return user.userID
 
     @jwt.user_lookup_loader
     def user_lookup_callback(_jwt_header, jwt_data):

@@ -1,4 +1,4 @@
-// File: JobDetails.tsx
+// File: src/pages/JobDetails.tsx
 
 import React, { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -45,8 +45,8 @@ export default function JobDetails() {
       return;
     }
     const reader = new FileReader();
-    reader.onloadend = () => {
-      submitJobApplication(job.id, {
+    reader.onloadend = async () => {
+      await submitJobApplication(job.id, {
         jobId: job.id,
         applicantId: 'current-user',
         applicantName: userProfile.name,
@@ -55,7 +55,7 @@ export default function JobDetails() {
       });
       setShowApplyModal(false);
       setApplication({ coverLetter: '', resume: null });
-      showToast('Application submitted!', 'success');
+      showToast('Application submitted! A confirmation message has been sent.', 'success');
     };
     reader.readAsDataURL(application.resume);
   };

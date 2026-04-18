@@ -1,4 +1,4 @@
-// File: Admin.tsx
+// File: src/pages/Admin.tsx
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../AuthContext';
@@ -22,11 +22,13 @@ export default function Admin() {
     messageRequests, 
     approveApplication, 
     rejectApplication, 
-    approveJob,      // <-- used for community board job approval
-    rejectJob,       // <-- used for community board job rejection
+    approveJob,
+    rejectJob,
     alumni, 
     loading, 
-    fetchAndSetJobApplications 
+    fetchAndSetJobApplications,
+    suspendUser,
+    banUser
   } = useData();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -67,13 +69,17 @@ export default function Admin() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Fetch job applications for alumni jobs once on load
+  // Fetch job applications for alumni jobs in batches to avoid overwhelming the browser
   useEffect(() => {
     const fetchAllJobApplications = async () => {
       if (!fetchAndSetJobApplications) return;
       if (initialFetchDone.current) return;
       
-      const jobsToFetch = jobs.filter(job => !job.applicants || job.applicants.length === 0);
+      // Only fetch for approved jobs that are NOT community board jobs (alumni direct postings)
+      const jobsToFetch = jobs.filter(job => 
+        job.status === 'approved' && job.communityId === undefined && (!job.applicants || job.applicants.length === 0)
+      );
+      
       if (jobsToFetch.length === 0) {
         initialFetchDone.current = true;
         return;
@@ -81,7 +87,11 @@ export default function Admin() {
       
       setRefreshing(true);
       try {
-        await Promise.all(jobsToFetch.map(job => fetchAndSetJobApplications(job.id)));
+        // Fetch in batches of 3 to avoid overwhelming the browser
+        for (let i = 0; i < jobsToFetch.length; i += 3) {
+          const batch = jobsToFetch.slice(i, i + 3);
+          await Promise.all(batch.map(job => fetchAndSetJobApplications(job.id)));
+        }
         initialFetchDone.current = true;
       } catch (error) {
         console.error('Failed to fetch job applications', error);
@@ -93,7 +103,7 @@ export default function Admin() {
     if (jobs.length > 0 && !initialFetchDone.current) {
       fetchAllJobApplications();
     }
-  }, [jobs.length, fetchAndSetJobApplications]);
+  }, [jobs, fetchAndSetJobApplications]);
 
   const handleLogout = () => {
     showToast('Logged out successfully.', 'info');
@@ -151,7 +161,11 @@ export default function Admin() {
     setRefreshing(true);
     try {
       if (fetchAndSetJobApplications) {
-        await Promise.all(jobs.map(job => fetchAndSetJobApplications(job.id)));
+        // Refresh only approved alumni jobs
+        const jobsToRefresh = jobs.filter(job => job.status === 'approved' && job.communityId === undefined);
+        for (let i = 0; i < jobsToRefresh.length; i += 3) {
+          await Promise.all(jobsToRefresh.slice(i, i + 3).map(job => fetchAndSetJobApplications(job.id)));
+        }
       }
       showToast('Dashboard refreshed.', 'success');
     } catch (error) {
@@ -189,22 +203,34 @@ export default function Admin() {
     setShowBanModal(true);
   };
 
-  const handleSuspendSubmit = () => {
+  const handleSuspendSubmit = async () => {
     if (!suspendReason.trim()) {
       showToast('Please provide a reason for suspension', 'error');
       return;
     }
-    showToast(`User ${selectedUser.name} suspended for ${suspendDuration} days`, 'info');
+    if (!selectedUser) return;
+    const ok = await suspendUser(selectedUser.id, suspendReason, parseInt(suspendDuration));
+    if (ok) {
+      showToast(`User ${selectedUser.name} suspended for ${suspendDuration} days`, 'info');
+    } else {
+      showToast('Failed to suspend user', 'error');
+    }
     setShowSuspendModal(false);
     setSelectedUser(null);
   };
 
-  const handleBanSubmit = () => {
+  const handleBanSubmit = async () => {
     if (!banReason.trim()) {
       showToast('Please provide a reason for ban', 'error');
       return;
     }
-    showToast(`User ${selectedUser.name} permanently banned`, 'error');
+    if (!selectedUser) return;
+    const ok = await banUser(selectedUser.id, banReason);
+    if (ok) {
+      showToast(`User ${selectedUser.name} permanently banned`, 'error');
+    } else {
+      showToast('Failed to ban user', 'error');
+    }
     setShowBanModal(false);
     setSelectedUser(null);
   };

@@ -1,4 +1,4 @@
-// File: Messages.tsx
+// File: src/pages/Messages.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../AuthContext';

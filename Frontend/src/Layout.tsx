@@ -1,3 +1,5 @@
+// File: src/Layout.tsx
+
 import React, { useState, useEffect } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { Home, Calendar, Briefcase, MessageSquare, User, ShieldCheck, Users, ChevronRight, ArrowUp } from 'lucide-react';
@@ -5,6 +7,7 @@ import { getAuthToken, useAuth } from './AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import Logo from './components/Logo';
 import { API_BASE } from './apiConfig';
+import { useData } from './DataContext';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -13,6 +16,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [resourceNames, setResourceNames] = useState<Record<string, string>>({});
   const [modalOpen, setModalOpen] = useState(false);
+  const { stats } = useData();
 
   useEffect(() => {
     const shell = document.querySelector('.mobile-shell') as HTMLElement | null;
@@ -153,14 +157,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="grid grid-cols-6 gap-1">
             {typedNavItems.map((item) => {
               const isActive = location.pathname.startsWith(item.path);
+              const isMessages = item.path === '/messages';
+              const unreadCount = stats.unreadCount;
               return (
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`nav-item ${isActive ? 'active' : ''}`}
+                  className={`nav-item ${isActive ? 'active' : ''} relative`}
                 >
                   <item.icon size={20} strokeWidth={1.8} />
                   <span>{item.label}</span>
+                  {isMessages && unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[20px] h-5 bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}

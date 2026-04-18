@@ -1,3 +1,5 @@
+# File: App/Views/profileViews.py
+
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from App.Controllers import profileController
@@ -14,8 +16,8 @@ profile_bp = Blueprint("profiles", __name__, url_prefix="/profiles")
 @jwt_required()
 def myProfileApi():
     user = currentUser()
-    if not user or user.role != "alumni":
-        return jsonify({"error": "Alumni access required"}), 403
+    if not user or user.role not in ("alumni", "admin"):
+        return jsonify({"error": "Alumni or admin access required"}), 403
     profile_dict = profileController.viewProfile(user.userID)
     return jsonify({
         "profile": profile_dict,
@@ -47,8 +49,8 @@ def publicProfile(alumni_id):
 @jwt_required()
 def updateBio():
     user = currentUser()
-    if not user or user.role != "alumni":
-        return jsonify({"error": "Alumni access required"}), 403
+    if not user or user.role not in ("alumni", "admin"):
+        return jsonify({"error": "Alumni or admin access required"}), 403
     data = _payload()
     try:
         updated = profileController.updateBio(
@@ -70,8 +72,8 @@ def updateBio():
 @jwt_required()
 def uploadPhoto():
     user = currentUser()
-    if not user or user.role != "alumni":
-        return jsonify({"error": "Alumni access required"}), 403
+    if not user or user.role not in ("alumni", "admin"):
+        return jsonify({"error": "Alumni or admin access required"}), 403
     data = _payload()
     photo_url = data.get("profilePicture")
     if not photo_url:

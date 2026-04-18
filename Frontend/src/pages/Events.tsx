@@ -1,4 +1,4 @@
-// File: Events.tsx
+// File: src/pages/Events.tsx
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
@@ -171,7 +171,6 @@ export default function Events() {
       setSelectedEvent((prev: any) => prev ? { ...prev, registered: true } : prev);
       setShowSuccessModal(true);
       showToast(`Registered for ${selectedEvent.title}!`, 'success');
-      // Refresh attendee count if admin is viewing? Admin can't register anyway.
     }
   };
 

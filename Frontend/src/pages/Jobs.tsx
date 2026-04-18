@@ -1,4 +1,4 @@
-// File: Jobs.tsx
+// File: src/pages/Jobs.tsx
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import { useNavigate } from 'react-router-dom';
-import PDFViewer from '../components/PDFViewer';
 
 export default function Jobs() {
   const { user } = useAuth();
@@ -96,7 +95,7 @@ export default function Jobs() {
     setShowApplyModal(id);
   };
 
-  const handleSubmitApplication = (e: React.FormEvent) => {
+  const handleSubmitApplication = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!showApplyModal || !application.resume) {
       showToast('Please upload a resume', 'error');
@@ -104,9 +103,9 @@ export default function Jobs() {
     }
 
     const reader = new FileReader();
-    reader.onloadend = () => {
+    reader.onloadend = async () => {
       const resumeUrl = reader.result as string;
-      submitJobApplication(showApplyModal, {
+      await submitJobApplication(showApplyModal, {
         jobId: showApplyModal,
         applicantId: 'current-user',
         applicantName: userProfile.name,
@@ -115,7 +114,7 @@ export default function Jobs() {
       });
       setShowApplyModal(null);
       setApplication({ coverLetter: '', resume: null });
-      showToast('Application submitted!', 'success');
+      showToast('Application submitted! A confirmation message has been sent.', 'success');
     };
     reader.readAsDataURL(application.resume);
   };
@@ -234,7 +233,6 @@ export default function Jobs() {
               </div>
 
               <div className="flex flex-wrap gap-2 mt-3">
-                {/* Salary display – removed extra dollar sign; backend already includes $ */}
                 <span className="text-xs bg-slate-50 px-2 py-1 rounded-lg text-slate-600 flex items-center gap-1">
                   <DollarSign size={12} className="text-emerald-500" /> 
                   <span className="font-medium text-emerald-700">{job.salary || 'Not specified'}</span>

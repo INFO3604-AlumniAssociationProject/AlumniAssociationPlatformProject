@@ -1,3 +1,5 @@
+# File: App/Views/eventViews.py
+
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from App.Controllers import eventController, eventRegistrationControllers
@@ -69,6 +71,7 @@ def registerAttendee(event_id):
     user = currentUser()
     if not user or user.role not in ("alumni", "admin"):
         return jsonify({"error": "Alumni access required"}), 403
+    # Payload is ignored; attendee is always the current user.
     try:
         reg_id = eventRegistrationControllers.registerForEvent(event_id, user.userID)
         return jsonify({"message": "Attendee registered", "registrationID": reg_id}), 201

@@ -1,3 +1,5 @@
+# File: App/Controllers/jobController.py
+
 from datetime import datetime, date, timezone
 from flask import current_app
 from uuid import uuid4
@@ -193,6 +195,7 @@ def viewJobApplications(job_id: str, requester_id: str, is_admin: bool = False) 
     job = db.session.get(Job, job_id)
     if not job:
         raise ValueError("Job not found")
+    # Admin can view applications for any job; job owner can view their own job's applications
     if not is_admin and job.alumniID != requester_id:
         raise PermissionError("Only the owner or admin can view applications")
 

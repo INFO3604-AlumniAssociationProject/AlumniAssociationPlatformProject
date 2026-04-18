@@ -1,13 +1,12 @@
-// File: DataContext.tsx
+// File: src/DataContext.tsx
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { getAuthToken, useAuth } from './AuthContext';
 import { API_BASE } from './apiConfig';
 import UWILogo from './assets/UWILogo.jpg';
-// default cover used when nothing else is available
+
 const DEFAULT_COVER =
   'https://images.unsplash.com/photo-1519389950473-47ba0277781c?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80';
-
 
 export interface Application {
   id: string;
@@ -46,6 +45,7 @@ export interface Job {
   applicationStatus?: 'pending' | 'approved' | 'rejected';
   saved?: boolean;
   testimonials?: JobTestimonial[];
+  expiryDate?: string;
 }
 
 export interface Community {
@@ -315,6 +315,7 @@ const transformJob = (job: any): Job => ({
   postedBy: job.alumniID ? toId(job.alumniID) : 'admin',
   saved: Boolean(job.saved),
   testimonials: job.testimonials || [],
+  expiryDate: job.expiryDate || '2026-12-31',
 });
 
 const generateEventImage = (event: any): string => {
@@ -387,6 +388,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [communities, setCommunities] = useState<Community[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState<LoadingState>({});
+
+  const fetchedJobsCache = useRef<Set<string>>(new Set());
 
   const getAdminId = () => {
     const admin = alumni.find(a => a.role === 'admin');
@@ -654,6 +657,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const useBoardPollEndpoint = Boolean(job.communityId);
     const endpoint = useBoardPollEndpoint ? `${API_BASE}/boards/${toId(boardID)}/jobs` : `${API_BASE}/jobs`;
 
+    const expiryDate = job.expiryDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -663,7 +668,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         description: `[${job.type}] ${job.description}`,
         salaryRange: job.salary,
         location: job.location,
-        expiryDate: '2026-12-31',
+        expiryDate,
         ...(useBoardPollEndpoint ? {} : { boardID: toId(boardID) }),
       }),
     });
@@ -718,7 +723,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
           }),
         );
         await fetchAppliedJobs();
-        // 🔥 Fetch latest applications for this job to sync admin view
         await fetchAndSetJobApplications(jobId);
         const jobTitle = jobs.find(j => toId(j.id) === toId(jobId))?.title || 'the position';
         if (user) {
@@ -775,7 +779,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const response = await fetch(`${API_BASE}/events/${id}/${endpoint}`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ attendeeID: user.id }),
     });
 
     if (response.ok) {
@@ -812,6 +815,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const fetchAndSetJobApplications = async (jobId: string) => {
+    if (fetchedJobsCache.current.has(jobId)) return;
+    fetchedJobsCache.current.add(jobId);
     const apps = await fetchJobApplications(jobId);
     if (!apps.length) return;
     setJobs((prev) => prev.map((job) => (toId(job.id) === toId(jobId) ? { ...job, applicants: apps } : job)));
