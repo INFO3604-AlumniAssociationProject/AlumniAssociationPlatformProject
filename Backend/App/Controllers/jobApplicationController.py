@@ -1,6 +1,8 @@
+# File: Backend/App/Controllers/jobApplicationController.py
+
 from datetime import datetime, timezone
 from App.database import db
-from App.Models import Job, JobApplication, Message
+from App.Models import Job, JobApplication, Message, User
 
 
 def createApplication(alumni_id: str, job_id: str) -> dict:
@@ -29,15 +31,20 @@ def createApplication(alumni_id: str, job_id: str) -> dict:
 
     # Send confirmation message to applicant
     try:
-        confirmation_msg = Message(
-            senderID="system",
-            receiverID=alumni_id,
-            content=f"Your application for '{job.title}' at {job.company} has been submitted successfully. The employer will review it shortly.",
-            status="sent",
-            attachments=[]
-        )
-        db.session.add(confirmation_msg)
-        db.session.commit()
+        # Find a valid admin user to be the sender of system messages
+        admin = User.query.filter_by(role="admin").first()
+        sender_id = admin.userID if admin else None
+        
+        if sender_id:
+            confirmation_msg = Message(
+                senderID=sender_id,
+                receiverID=alumni_id,
+                content=f"Your application for '{job.title}' at {job.company} has been submitted successfully. The employer will review it shortly.",
+                status="sent",
+                attachments=[]
+            )
+            db.session.add(confirmation_msg)
+            db.session.commit()
     except Exception:
         # Non‑critical, don't fail the application
         pass
@@ -92,14 +99,19 @@ def updateApplicationStatus(application_id: str, new_status: str, is_admin: bool
     if new_status == "approved" and old_status != "approved":
         job = db.session.get(Job, app.jobID)
         if job:
-            msg = Message(
-                senderID="system",
-                receiverID=app.alumniID,
-                content=f"Congratulations! Your application for '{job.title}' has been approved. The employer will contact you soon.",
-                status="sent",
-                attachments=[]
-            )
-            db.session.add(msg)
-            db.session.commit()
+            # Find a valid admin user to be the sender
+            admin = User.query.filter_by(role="admin").first()
+            sender_id = admin.userID if admin else None
+            
+            if sender_id:
+                msg = Message(
+                    senderID=sender_id,
+                    receiverID=app.alumniID,
+                    content=f"Congratulations! Your application for '{job.title}' has been approved. The employer will contact you soon.",
+                    status="sent",
+                    attachments=[]
+                )
+                db.session.add(msg)
+                db.session.commit()
 
     return app
