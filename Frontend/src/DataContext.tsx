@@ -13,7 +13,7 @@ export interface Application {
   jobId: string;
   applicantId: string;
   applicantName: string;
-  resumeUrl: string;
+  resumeURL: string;           // <-- fixed: was resumeUrl
   coverLetter: string;
   date: string;
   status: 'pending' | 'approved' | 'rejected';
@@ -685,7 +685,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const payload: any = {
         jobID: toId(jobId),
         coverLetter: application.coverLetter,
-        resumeUrl: application.resumeUrl,
+        resumeURL: application.resumeURL,   // <-- fixed: was resumeUrl
       };
       if (application.applicantName) payload.applicantName = application.applicantName;
 
@@ -702,7 +702,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           jobId: toId(jobId),
           applicantId: user?.id || 'current-user',
           applicantName: application.applicantName,
-          resumeUrl: application.resumeUrl,
+          resumeURL: application.resumeURL,   // <-- fixed
           coverLetter: application.coverLetter,
           date: new Date().toLocaleDateString(),
           status: 'pending',
@@ -803,7 +803,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         jobId: toId(a.jobID || a.jobId),
         applicantId: toId(a.applicantID || a.applicantId || a.userID),
         applicantName: a.applicantName || a.name || '',
-        resumeUrl: a.resumeUrl || a.resume || '',
+        resumeURL: a.resumeURL || a.resume || '',   // <-- accept both from backend, but we store as resumeURL
         coverLetter: a.coverLetter || a.cover_letter || '',
         date: a.date || a.createdAt || a.timestamp || '',
         status: (a.status || 'pending') as 'pending' | 'approved' | 'rejected',
